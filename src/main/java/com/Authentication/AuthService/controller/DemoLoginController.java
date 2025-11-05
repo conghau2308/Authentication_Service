@@ -44,9 +44,9 @@ public class DemoLoginController {
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
 
-            // 4. QUAN TRỌNG: Lưu context vào HTTP Session
+            // 4. Lưu context vào HTTP Session
             // Đây là bước tạo cookie "JSESSIONID"
-            HttpSession session = request.getSession(true); // true = tạo session nếu chưa có
+            HttpSession session = request.getSession(true);
             session.setAttribute("SPRING_SECURITY_CONTEXT", context);
 
             return ResponseEntity.ok().body("Đăng nhập demo thành công");

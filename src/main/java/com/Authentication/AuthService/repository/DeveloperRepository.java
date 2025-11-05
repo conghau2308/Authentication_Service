@@ -6,7 +6,6 @@ import java.util.Optional;
 
 public interface DeveloperRepository extends JpaRepository<Developer, Long> {
 
-    // Hàm này RẤT QUAN TRỌNG
-    // Nó tìm developer bằng email (mà bạn gọi là username)
+    // tạm dùng username như email
     Optional<Developer> findByEmail(String email); 
 }
