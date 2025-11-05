@@ -9,14 +9,15 @@ import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.Authentication.AuthService.dto.CreateClientDto;
 import com.Authentication.AuthService.entity.ClientOwnerShip;
 import com.Authentication.AuthService.entity.Developer;
 import com.Authentication.AuthService.repository.ClientOwnerShipRepository;
 
-import jakarta.transaction.Transactional;
 
 @Service
 public class ClientManagementService {
@@ -49,6 +50,7 @@ public class ClientManagementService {
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .tokenSettings(TokenSettings.builder().build())
                 .build();
         
         this.clientRepository.save(registeredClient);
