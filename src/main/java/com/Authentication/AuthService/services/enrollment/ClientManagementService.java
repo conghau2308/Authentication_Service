@@ -48,7 +48,7 @@ public class ClientManagementService {
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUris(uris -> uris.addAll(dto.getRedirectUris()))
                 .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.PROFILE) // Có thể thay đổi để chọn scope cần thiết
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .tokenSettings(TokenSettings.builder().build())
                 .build();

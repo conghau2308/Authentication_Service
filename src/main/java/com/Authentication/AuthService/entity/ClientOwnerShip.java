@@ -20,6 +20,8 @@ public class ClientOwnerShip {
     @Column(nullable = false, unique = true)
     private String clientId;
 
+    protected ClientOwnerShip() {}
+
     public ClientOwnerShip(Long developerId, String clientId) {
         this.developerId = developerId;
         this.clientId = clientId;
