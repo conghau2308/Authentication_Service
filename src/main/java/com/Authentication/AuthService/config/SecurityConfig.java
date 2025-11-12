@@ -14,27 +14,31 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.DispatcherType;
+
 @Configuration
 public class SecurityConfig {
 
-    // Encoder chuẩn cho password
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // Cấu hình CORS cho phép gọi API từ Next.js (port 3000)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of("http://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization", "Content-Type", "Accept", "X-Requested-With"
+        ));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -42,18 +46,32 @@ public class SecurityConfig {
         return source;
     }
 
-    // CHUỖI BẢO MẬT ƯU TIÊN CAO - Authorization Server
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
-        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
+        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = 
+            new OAuth2AuthorizationServerConfigurer();
 
-        http.securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
-                .with(authorizationServerConfigurer, config -> config.oidc(Customizer.withDefaults()))
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login")))
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                .cors(Customizer.withDefaults());
+        RequestMatcher excludeAuthorizeMatcher = new OrRequestMatcher(
+            new AntPathRequestMatcher("/oauth2/token"),
+            new AntPathRequestMatcher("/oauth2/introspect"),
+            new AntPathRequestMatcher("/oauth2/revoke"),
+            new AntPathRequestMatcher("/oauth2/jwks"),
+            new AntPathRequestMatcher("/.well-known/**"),
+            new AntPathRequestMatcher("/userinfo")
+        );
+
+        http
+            .securityMatcher(excludeAuthorizeMatcher)
+            .with(authorizationServerConfigurer, configurer -> {
+                configurer.oidc(Customizer.withDefaults());
+            })
+            .authorizeHttpRequests(authorize -> authorize
+                .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+            .cors(Customizer.withDefaults())
+            .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }
@@ -61,22 +79,45 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
-
         http
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        .requestMatchers("/portal/demo-login").permitAll()
-
-                        .requestMatchers("/portal/api/**").hasRole("DEVELOPER")
-                        .requestMatchers("/portal/login", "/portal/register").permitAll()
-                        .requestMatchers("/login").permitAll()
-                        .anyRequest().authenticated())
-                .logout(logout -> logout.logoutSuccessUrl("/portal/login?logout"))
-                .cors(Customizer.withDefaults())
-                .csrf(AbstractHttpConfigurer::disable);
+            .authorizeHttpRequests(authorize -> authorize
+                // ✅ CHO PHÉP TẤT CẢ FORWARD VÀ INCLUDE REQUESTS
+                .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
+                    .permitAll()
+                
+                // ✅ Cho phép OPTIONS requests
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
+                // ✅ OAuth2 custom endpoints
+                .requestMatchers("/oauth2/authorize").permitAll()
+                .requestMatchers("/oauth2/face-auth/login").permitAll()
+                
+                // ✅ Face login page - CHO PHÉP CẢ FORWARD
+                .requestMatchers("/face-login").permitAll()
+                
+                // ✅ Portal endpoints
+                .requestMatchers("/portal/demo-login").permitAll()
+                .requestMatchers("/portal/login", "/portal/register").permitAll()
+                .requestMatchers("/portal/api/**").hasRole("DEVELOPER")
+                
+                // ✅ Error page
+                .requestMatchers("/error").permitAll()
+                
+                // Static resources
+                .requestMatchers("/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
+                
+                // All other requests require authentication
+                .anyRequest().authenticated()
+            )
+            .logout(logout -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/portal/login?logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+            )
+            .cors(Customizer.withDefaults())
+            .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }
-
 }
