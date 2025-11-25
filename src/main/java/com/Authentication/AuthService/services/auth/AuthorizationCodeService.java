@@ -34,7 +34,15 @@ public class AuthorizationCodeService {
      * @param scope       Scope được yêu cầu
      * @return Chuỗi authorization_code
      */
-    public String generateAuthorizationCode(String clientId, String username, String redirectUri, String scope) {
+    public String generateAuthorizationCode(
+            String clientId,
+            String username,
+            String redirectUri,
+            String scope,
+            String state,
+            String nonce,
+            String codeChallenge,
+            String codeChallengeMethod) {
 
         // 1. Tạo một chuỗi ngẫu nhiên an toàn
         String code = generateSecureCodeString();
@@ -46,6 +54,10 @@ public class AuthorizationCodeService {
         authCode.setClientId(clientId);
         authCode.setRedirectUri(redirectUri);
         authCode.setScope(scope);
+        authCode.setState(state);
+        authCode.setNonce(nonce);
+        authCode.setCodeChallenge(codeChallenge);
+        authCode.setCodeChallengeMethod(codeChallengeMethod);
         authCode.setExpiresAt(Instant.now().plusSeconds(CODE_EXPIRATION_SECONDS));
         authCode.setUsed(false);
 

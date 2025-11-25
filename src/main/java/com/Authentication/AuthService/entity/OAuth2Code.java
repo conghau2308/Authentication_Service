@@ -33,6 +33,10 @@ public class OAuth2Code {
     // Thông tin context để xác thực tại /token endpoint
     private String redirectUri;
     private String scope;
+    private String state;
+    private String nonce;
+    private String codeChallenge;
+    private String codeChallengeMethod;
 
     // Thời điểm hết hạn (ví dụ: 5 phút)
     @Column(nullable = false)

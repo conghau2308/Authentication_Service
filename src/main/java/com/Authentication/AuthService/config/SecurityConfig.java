@@ -34,7 +34,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(List.of("http://localhost:3001"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
             "Authorization", "Content-Type", "Accept", "X-Requested-With"
@@ -46,23 +46,36 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * ⚠️ QUAN TRỌNG: Order(1) có độ ưu tiên cao hơn Order(2)
+     * Nên cần cấu hình để OAuth2 server không can thiệp vào /oauth2/token của custom controller
+     */
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = 
             new OAuth2AuthorizationServerConfigurer();
 
-        RequestMatcher excludeAuthorizeMatcher = new OrRequestMatcher(
-            new AntPathRequestMatcher("/oauth2/token"),
+        // ❌ SAI CÁCH: Cái này khiến Spring Security OAuth2 Server xử lý /oauth2/token
+        // RequestMatcher excludeAuthorizeMatcher = new OrRequestMatcher(
+        //     new AntPathRequestMatcher("/oauth2/token"),
+        //     ...
+        // );
+
+        // ✅ ĐÚNG CÁCH: Chỉ cho phép OAuth2 xử lý những endpoint cụ thể
+        // Bỏ /oauth2/token để custom controller của bạn xử lý
+        RequestMatcher authorizationServerMatcher = new OrRequestMatcher(
+            new AntPathRequestMatcher("/.well-known/oauth-authorization-server"),
+            new AntPathRequestMatcher("/.well-known/openid-configuration"),
             new AntPathRequestMatcher("/oauth2/introspect"),
             new AntPathRequestMatcher("/oauth2/revoke"),
             new AntPathRequestMatcher("/oauth2/jwks"),
-            new AntPathRequestMatcher("/.well-known/**"),
             new AntPathRequestMatcher("/userinfo")
+            // ⚠️ KHÔNG thêm /oauth2/token - để custom controller xử lý
         );
 
         http
-            .securityMatcher(excludeAuthorizeMatcher)
+            .securityMatcher(authorizationServerMatcher)
             .with(authorizationServerConfigurer, configurer -> {
                 configurer.oidc(Customizer.withDefaults());
             })
@@ -85,20 +98,25 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
                     .permitAll()
                 
-                // ✅ Cho phép OPTIONS requests
+                // ✅ Cho phép OPTIONS requests (CORS preflight)
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // ✅ OAuth2 custom endpoints
+                // ✅ OAuth2 custom endpoints - CHO PHÉP CẢ UNAUTHENTICATED
                 .requestMatchers("/oauth2/authorize").permitAll()
+                .requestMatchers("/oauth2/token").permitAll()  // ← THÊM CÁI NÀY
                 .requestMatchers("/oauth2/face-auth/login").permitAll()
+                .requestMatchers("/oauth2/revoke").permitAll()
                 
-                // ✅ Face login page - CHO PHÉP CẢ FORWARD
+                // ✅ Face login page
                 .requestMatchers("/face-login").permitAll()
                 
                 // ✅ Portal endpoints
                 .requestMatchers("/portal/demo-login").permitAll()
                 .requestMatchers("/portal/login", "/portal/register").permitAll()
                 .requestMatchers("/portal/api/**").hasRole("DEVELOPER")
+                
+                // ✅ Demo endpoints
+                .requestMatchers("/demo/**").permitAll()
                 
                 // ✅ Error page
                 .requestMatchers("/error").permitAll()

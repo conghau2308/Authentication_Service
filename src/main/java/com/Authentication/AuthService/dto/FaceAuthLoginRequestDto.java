@@ -13,4 +13,7 @@ public class FaceAuthLoginRequestDto {
     private String redirectUri;
     private String scope;
     private String state;
+    private String nonce;
+    private String codeChallenge;
+    private String codeChallengeMethod;
 }

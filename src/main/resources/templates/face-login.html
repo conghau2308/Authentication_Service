@@ -86,8 +86,11 @@
             <input type="hidden" name="redirectUri" th:value="${redirect_uri}">
             <input type="hidden" name="scope" th:value="${scope}">
             <input type="hidden" name="state" th:value="${state}">
+            <input type="hidden" name="nonce" th:value="${nonce}">
+            <input type="hidden" name="codeChallenge" th:value="${code_challenge}">
+            <input type="hidden" name="codeChallengeMethod" th:value="${code_challenge_method}">
 
-            <button type-"submit" class="submit-btn">Login with Face</button>
+            <button type="submit" class="submit-btn">Login with Face</button>
         </form>
     </div>
 

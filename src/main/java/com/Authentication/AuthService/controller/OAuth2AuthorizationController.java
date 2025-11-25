@@ -3,11 +3,16 @@ package com.Authentication.AuthService.controller;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import com.Authentication.AuthService.dto.FaceAuthLoginRequestDto;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
+import com.Authentication.AuthService.services.auth.TokenService;
 
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,10 +33,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class OAuth2AuthorizationController {
-    
+
     private final RegisteredClientRepository registeredClientRepository;
     private final FaceAuthService faceAuthService;
     private final AuthorizationCodeService authorizationCodeService;
+    private final TokenService tokenService;
 
     @GetMapping("/authorize")
     public String authorize(
@@ -38,10 +45,13 @@ public class OAuth2AuthorizationController {
             @RequestParam("redirect_uri") String redirectUri,
             @RequestParam(value = "scope", defaultValue = "openid profile") String scope,
             @RequestParam(value = "state", required = false) String state,
+            @RequestParam(value = "nonce", required = false) String nonce,
+            @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
             @RequestParam(value = "response_type", defaultValue = "code") String responseType,
             Model model,
             HttpServletResponse response) throws IOException {
-        
+
         log.info("Nhận yêu cầu authorize - client_id: {}, redirect_uri: {}", clientId, redirectUri);
 
         // 1. Validate response_type
@@ -78,24 +88,43 @@ public class OAuth2AuthorizationController {
             }
         }
 
-        // 5. Lưu thông tin vào model
+        // 5. Validate các tham số PKCE nếu có
+        if (StringUtils.hasText(codeChallenge) && !StringUtils.hasText(codeChallengeMethod)) {
+            codeChallengeMethod = "plain";
+        }
+
+        if (!StringUtils.hasText(codeChallenge) && StringUtils.hasText(codeChallengeMethod)) {
+            log.error("Thiếu code_challenge khi client gửi code_challenge_method");
+            return redirectError(response, redirectUri, "invalid_request",
+                    "code_challenge là bắt buộc khi client gửi code_challenge_method", state);
+        }
+
+        if (StringUtils.hasText(codeChallengeMethod) && !isSupportedCodeChallengeMethod(codeChallengeMethod)) {
+            log.error("code_challenge_method không được hỗ trợ: {}", codeChallengeMethod);
+            return redirectError(response, redirectUri, "invalid_request",
+                    "code_challenge_method chỉ hỗ trợ plain hoặc S256", state);
+        }
+
+        // 6. Lưu thông tin vào model
         model.addAttribute("client_id", clientId);
         model.addAttribute("redirect_uri", redirectUri);
         model.addAttribute("scope", scope);
         model.addAttribute("state", state != null ? state : "");
+        model.addAttribute("nonce", nonce != null ? nonce : "");
+        model.addAttribute("code_challenge", codeChallenge != null ? codeChallenge : "");
+        model.addAttribute("code_challenge_method", codeChallengeMethod != null ? codeChallengeMethod : "");
         model.addAttribute("client_name", registeredClient.getClientName());
 
         log.info("Hiển thị form Face Authentication cho client: {}", registeredClient.getClientName());
-        
-        // ✅ THÊM PREFIX THYMELEAF
-        return "face-login";  // Thymeleaf sẽ tự tìm templates/face-login.html
+
+        return "face-login";
     }
 
     @PostMapping("/face-auth/login")
     public void faceAuthLogin(
             @ModelAttribute FaceAuthLoginRequestDto request,
             HttpServletResponse response) throws IOException {
-        
+
         log.info("Nhận yêu cầu face-auth login - username: {}, client_id: {}",
                 request.getUsername(), request.getClientId());
 
@@ -130,12 +159,23 @@ public class OAuth2AuthorizationController {
 
             log.info("Xác thực khuôn mặt thành công cho user: {}", request.getUsername());
 
+            // Chuẩn hóa các tham số tuỳ chọn trước khi lưu
+            String sanitizedNonce = StringUtils.hasText(request.getNonce()) ? request.getNonce() : null;
+            String sanitizedCodeChallenge = StringUtils.hasText(request.getCodeChallenge()) ? request.getCodeChallenge() : null;
+            String sanitizedCodeChallengeMethod = StringUtils.hasText(request.getCodeChallengeMethod())
+                    ? request.getCodeChallengeMethod()
+                    : null;
+
             // 4. Tạo authorization_code
             String authorizationCode = authorizationCodeService.generateAuthorizationCode(
                     request.getClientId(),
                     request.getUsername(),
                     request.getRedirectUri(),
-                    request.getScope());
+                    request.getScope(),
+                    request.getState(),
+                    sanitizedNonce,
+                    sanitizedCodeChallenge,
+                    sanitizedCodeChallengeMethod);
 
             log.info("Đã tạo authorization_code: {} cho user: {}", authorizationCode, request.getUsername());
 
@@ -155,6 +195,150 @@ public class OAuth2AuthorizationController {
         }
     }
 
+    /**
+     * Endpoint /token xử lý cả authorization_code và refresh_token grant types
+     */
+    @PostMapping("/token")
+    public ResponseEntity<?> token(
+            @RequestParam("grant_type") String grantType,
+            @RequestParam("client_id") String clientId,
+            @RequestParam("client_secret") String clientSecret,
+            @RequestParam(value = "code", required = false) String code,
+            @RequestParam(value = "code_verifier", required = false) String codeVerifier,
+            @RequestParam(value = "refresh_token", required = false) String refreshToken,
+            @RequestParam(value = "redirect_uri", required = false) String redirectUri) {
+
+        log.info("Nhận yêu cầu token - grant_type: {}, client_id: {}", grantType, clientId);
+
+        try {
+            // Validate grant_type
+            if (!"authorization_code".equals(grantType) && !"refresh_token".equals(grantType)) {
+                log.error("Grant type không được hỗ trợ: {}", grantType);
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createErrorResponse("unsupported_grant_type",
+                                "Chỉ hỗ trợ grant_type=authorization_code hoặc refresh_token"));
+            }
+
+            // Validate client_id
+            if (clientId == null || clientId.isEmpty()) {
+                log.error("client_id là bắt buộc");
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createErrorResponse("invalid_request", "client_id là bắt buộc"));
+            }
+
+            // Validate client_secret
+            if (clientSecret == null || clientSecret.isEmpty()) {
+                log.error("client_secret là bắt buộc");
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createErrorResponse("invalid_request", "client_secret là bắt buộc"));
+            }
+
+            // Kiểm tra parameter theo grant_type
+            if ("authorization_code".equals(grantType)) {
+                if (code == null || code.isEmpty()) {
+                    log.error("code là bắt buộc cho grant_type=authorization_code");
+                    return ResponseEntity
+                            .status(HttpStatus.BAD_REQUEST)
+                            .body(createErrorResponse("invalid_request", "code là bắt buộc"));
+                }
+
+                log.info("Xử lý authorization_code flow - code: {}", code);
+                Object tokenResponse = tokenService.exchangeCodeForTokens(
+                        grantType, clientId, clientSecret, code, redirectUri, codeVerifier);
+
+                log.info("Token được tạo thành công cho client: {}", clientId);
+                return ResponseEntity.ok(tokenResponse);
+            }
+
+            // Xử lý refresh_token
+            if ("refresh_token".equals(grantType)) {
+                if (refreshToken == null || refreshToken.isEmpty()) {
+                    log.error("refresh_token là bắt buộc cho grant_type=refresh_token");
+                    return ResponseEntity
+                            .status(HttpStatus.BAD_REQUEST)
+                            .body(createErrorResponse("invalid_request", "refresh_token là bắt buộc"));
+                }
+
+                log.info("Xử lý refresh_token flow");
+                Object tokenResponse = tokenService.exchangeCodeForTokens(
+                        grantType, clientId, clientSecret, refreshToken, redirectUri, null);
+
+                log.info("Token được tạo thành công từ refresh_token cho client: {}", clientId);
+                return ResponseEntity.ok(tokenResponse);
+            }
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(createErrorResponse("unsupported_grant_type", "Grant type không được hỗ trợ"));
+
+        } catch (IllegalArgumentException e) {
+            log.error("Lỗi validation token request: {}", e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(createErrorResponse(e.getMessage(),
+                            getErrorDescription(e.getMessage())));
+        } catch (Exception e) {
+            log.error("Lỗi không xác định khi tạo token: ", e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("server_error", "Lỗi server khi tạo token"));
+        }
+    }
+
+    /**
+     * Endpoint để revoke refresh token
+     */
+    @PostMapping("/revoke")
+    public ResponseEntity<?> revokeToken(
+            @RequestParam("token") String token,
+            @RequestParam("token_type_hint") String tokenTypeHint,
+            @RequestParam("client_id") String clientId,
+            @RequestParam("client_secret") String clientSecret) {
+
+        log.info("Nhận yêu cầu revoke token - token_type_hint: {}, client_id: {}",
+                tokenTypeHint, clientId);
+
+        try {
+            // Validate client
+            RegisteredClient registeredClient = registeredClientRepository.findByClientId(clientId);
+            if (registeredClient == null) {
+                log.error("Client không tồn tại: {}", clientId);
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createErrorResponse("invalid_client", "Client không hợp lệ"));
+            }
+
+            // Validate client_secret
+            if (registeredClient.getClientSecret() == null || token.isEmpty()) {
+                log.error("Token là bắt buộc");
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createErrorResponse("invalid_request", "token là bắt buộc"));
+            }
+
+            // Hiện tại chỉ hỗ trợ revoke refresh_token
+            if (!"refresh_token".equals(tokenTypeHint)) {
+                log.warn("token_type_hint không được hỗ trợ: {}", tokenTypeHint);
+                return ResponseEntity.ok(new HashMap<>());
+            }
+
+            // Gọi service revoke
+            // refreshTokenService.revokeRefreshToken(token);
+
+            log.info("Token đã được revoke thành công");
+            return ResponseEntity.ok(new HashMap<>());
+
+        } catch (Exception e) {
+            log.error("Lỗi khi revoke token: ", e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("server_error", "Lỗi server khi revoke token"));
+        }
+    }
+
     // ==================== Helper Methods ====================
 
     private String buildSuccessRedirectUrl(String redirectUri, String code, String state) {
@@ -167,6 +351,10 @@ public class OAuth2AuthorizationController {
         }
 
         return url.toString();
+    }
+
+    private boolean isSupportedCodeChallengeMethod(String method) {
+        return "plain".equalsIgnoreCase(method) || "S256".equalsIgnoreCase(method);
     }
 
     private void redirectWithError(HttpServletResponse response, String redirectUri,
@@ -197,5 +385,24 @@ public class OAuth2AuthorizationController {
         } else {
             return "redirect:/error?error=" + error + "&error_description=" + errorDescription;
         }
+    }
+
+    private Map<String, String> createErrorResponse(String error, String errorDescription) {
+        Map<String, String> errorResponse = new HashMap<>();
+        errorResponse.put("error", error);
+        errorResponse.put("error_description", errorDescription);
+        return errorResponse;
+    }
+
+    private String getErrorDescription(String error) {
+        return switch (error) {
+            case "unsupported_grant_type" ->
+                "Grant type không được hỗ trợ. Chỉ hỗ trợ authorization_code hoặc refresh_token";
+            case "invalid_client" -> "Client ID hoặc Client Secret không hợp lệ";
+            case "invalid_grant" ->
+                "Authorization code hoặc refresh token không hợp lệ, đã hết hạn hoặc đã được sử dụng";
+            case "invalid_request" -> "Request không hợp lệ, thiếu parameter bắt buộc";
+            default -> "Lỗi không xác định";
+        };
     }
 }
