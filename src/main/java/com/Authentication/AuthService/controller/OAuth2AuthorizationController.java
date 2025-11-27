@@ -16,14 +16,20 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.Authentication.AuthService.dto.FaceAuthLoginRequestDto;
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
+import com.Authentication.AuthService.services.auth.JwtService;
 import com.Authentication.AuthService.services.auth.TokenService;
+import com.Authentication.AuthService.services.user.UserService;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +44,8 @@ public class OAuth2AuthorizationController {
     private final FaceAuthService faceAuthService;
     private final AuthorizationCodeService authorizationCodeService;
     private final TokenService tokenService;
+    private final JwtService jwtService;
+    private final UserService userService;
 
     @GetMapping("/authorize")
     public String authorize(
@@ -161,7 +169,8 @@ public class OAuth2AuthorizationController {
 
             // Chuẩn hóa các tham số tuỳ chọn trước khi lưu
             String sanitizedNonce = StringUtils.hasText(request.getNonce()) ? request.getNonce() : null;
-            String sanitizedCodeChallenge = StringUtils.hasText(request.getCodeChallenge()) ? request.getCodeChallenge() : null;
+            String sanitizedCodeChallenge = StringUtils.hasText(request.getCodeChallenge()) ? request.getCodeChallenge()
+                    : null;
             String sanitizedCodeChallengeMethod = StringUtils.hasText(request.getCodeChallengeMethod())
                     ? request.getCodeChallengeMethod()
                     : null;
@@ -339,6 +348,65 @@ public class OAuth2AuthorizationController {
         }
     }
 
+    /**
+     * OIDC UserInfo Endpoint
+     * GET /oauth2/userinfo
+     * Header: Authorization: Bearer {access_token}
+     */
+    @GetMapping("/userinfo")
+    public ResponseEntity<Map<String, Object>> getUserInfo(
+            @RequestHeader("Authorization") String authorization) {
+
+        try {
+            // 1. Extract token từ header
+            if (!authorization.startsWith("Bearer ")) {
+                log.error("Invalid authorization header format");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(createErrorResponse("invalid_token", "Invalid authorization header"));
+            }
+
+            String accessToken = authorization.substring(7);
+
+            // 2. Validate và decode access token
+            Claims claims = jwtService.validateAccessToken(accessToken);
+            String username = claims.getSubject();
+
+            // 3. Lấy thông tin user từ database
+            User user = userService.findByUsername(username);
+
+            if (user == null) {
+                log.error("User not found: {}", username);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(createErrorResponse("user_not_found", "User not found"));
+            }
+
+            // 4. Trả về user info theo OIDC standard
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("sub", user.getUsername());
+            userInfo.put("user_id", user.getId().toString());
+            userInfo.put("name", user.getName());
+            userInfo.put("email", user.getEmail());
+            userInfo.put("preferred_username", user.getUsername());
+
+            // Optional claims
+            // if (user.getPicture() != null) {
+            //     userInfo.put("picture", user.getPicture());
+            // }
+
+            log.info("UserInfo returned for user: {}", username);
+            return ResponseEntity.ok(userInfo);
+
+        } catch (JwtException e) {
+            log.error("Invalid access token: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(createErrorResponse("invalid_token", "Access token is invalid or expired"));
+        } catch (Exception e) {
+            log.error("Error fetching user info: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("server_error", "Internal server error"));
+        }
+    }
+
     // ==================== Helper Methods ====================
 
     private String buildSuccessRedirectUrl(String redirectUri, String code, String state) {
@@ -387,8 +455,8 @@ public class OAuth2AuthorizationController {
         }
     }
 
-    private Map<String, String> createErrorResponse(String error, String errorDescription) {
-        Map<String, String> errorResponse = new HashMap<>();
+    private Map<String, Object> createErrorResponse(String error, String errorDescription) {
+        Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("error", error);
         errorResponse.put("error_description", errorDescription);
         return errorResponse;

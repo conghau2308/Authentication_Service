@@ -34,11 +34,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3001"));
+        configuration.setAllowedOrigins(List.of("http://localhost:3001", "http://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", "Content-Type", "Accept", "X-Requested-With"
-        ));
+                "Authorization", "Content-Type", "Accept", "X-Requested-With"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -46,45 +45,32 @@ public class SecurityConfig {
         return source;
     }
 
-    /**
-     * ⚠️ QUAN TRỌNG: Order(1) có độ ưu tiên cao hơn Order(2)
-     * Nên cần cấu hình để OAuth2 server không can thiệp vào /oauth2/token của custom controller
-     */
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
-        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = 
-            new OAuth2AuthorizationServerConfigurer();
+        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
 
-        // ❌ SAI CÁCH: Cái này khiến Spring Security OAuth2 Server xử lý /oauth2/token
-        // RequestMatcher excludeAuthorizeMatcher = new OrRequestMatcher(
-        //     new AntPathRequestMatcher("/oauth2/token"),
-        //     ...
-        // );
-
-        // ✅ ĐÚNG CÁCH: Chỉ cho phép OAuth2 xử lý những endpoint cụ thể
-        // Bỏ /oauth2/token để custom controller của bạn xử lý
         RequestMatcher authorizationServerMatcher = new OrRequestMatcher(
-            new AntPathRequestMatcher("/.well-known/oauth-authorization-server"),
-            new AntPathRequestMatcher("/.well-known/openid-configuration"),
-            new AntPathRequestMatcher("/oauth2/introspect"),
-            new AntPathRequestMatcher("/oauth2/revoke"),
-            new AntPathRequestMatcher("/oauth2/jwks"),
-            new AntPathRequestMatcher("/userinfo")
-            // ⚠️ KHÔNG thêm /oauth2/token - để custom controller xử lý
-        );
+                new AntPathRequestMatcher("/.well-known/oauth-authorization-server"),
+                new AntPathRequestMatcher("/.well-known/openid-configuration"),
+                new AntPathRequestMatcher("/oauth2/introspect"),
+                new AntPathRequestMatcher("/oauth2/revoke"),
+                new AntPathRequestMatcher("/.well-known/jwks.json"),
+                new AntPathRequestMatcher("/userinfo"));
 
         http
-            .securityMatcher(authorizationServerMatcher)
-            .with(authorizationServerConfigurer, configurer -> {
-                configurer.oidc(Customizer.withDefaults());
-            })
-            .authorizeHttpRequests(authorize -> authorize
-                .anyRequest().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-            .cors(Customizer.withDefaults())
-            .csrf(AbstractHttpConfigurer::disable);
+                .securityMatcher(authorizationServerMatcher)
+                .with(authorizationServerConfigurer, configurer -> {
+                    configurer.oidc(Customizer.withDefaults());
+                })
+                // ✅ FIX: Cho phép public access đến JWKS endpoints
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/.well-known/jwks.json").permitAll()
+                        .requestMatchers("/.well-known/openid-configuration").permitAll()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                .cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }
@@ -93,48 +79,47 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-            .authorizeHttpRequests(authorize -> authorize
-                // ✅ CHO PHÉP TẤT CẢ FORWARD VÀ INCLUDE REQUESTS
-                .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
-                    .permitAll()
-                
-                // ✅ Cho phép OPTIONS requests (CORS preflight)
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                
-                // ✅ OAuth2 custom endpoints - CHO PHÉP CẢ UNAUTHENTICATED
-                .requestMatchers("/oauth2/authorize").permitAll()
-                .requestMatchers("/oauth2/token").permitAll()  // ← THÊM CÁI NÀY
-                .requestMatchers("/oauth2/face-auth/login").permitAll()
-                .requestMatchers("/oauth2/revoke").permitAll()
-                
-                // ✅ Face login page
-                .requestMatchers("/face-login").permitAll()
-                
-                // ✅ Portal endpoints
-                .requestMatchers("/portal/demo-login").permitAll()
-                .requestMatchers("/portal/login", "/portal/register").permitAll()
-                .requestMatchers("/portal/api/**").hasRole("DEVELOPER")
-                
-                // ✅ Demo endpoints
-                .requestMatchers("/demo/**").permitAll()
-                
-                // ✅ Error page
-                .requestMatchers("/error").permitAll()
-                
-                // Static resources
-                .requestMatchers("/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
-                
-                // All other requests require authentication
-                .anyRequest().authenticated()
-            )
-            .logout(logout -> logout
-                .logoutUrl("/logout")
-                .logoutSuccessUrl("/portal/login?logout")
-                .invalidateHttpSession(true)
-                .deleteCookies("JSESSIONID")
-            )
-            .cors(Customizer.withDefaults())
-            .csrf(AbstractHttpConfigurer::disable);
+                .authorizeHttpRequests(authorize -> authorize
+                        .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
+                        .permitAll()
+
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // ✅ JWKS endpoints - public access
+                        .requestMatchers("/.well-known/**").permitAll()
+
+                        // ✅ OAuth2 custom endpoints
+                        .requestMatchers("/oauth2/authorize").permitAll()
+                        .requestMatchers("/oauth2/token").permitAll()
+                        .requestMatchers("/oauth2/face-auth/login").permitAll()
+                        .requestMatchers("/oauth2/revoke").permitAll()
+                        .requestMatchers("/oauth2/userinfo").permitAll()
+
+                        // ✅ Face login page
+                        .requestMatchers("/face-login").permitAll()
+
+                        // ✅ Portal endpoints
+                        .requestMatchers("/portal/demo-login").permitAll()
+                        .requestMatchers("/portal/login", "/portal/register").permitAll()
+                        .requestMatchers("/portal/api/**").hasRole("DEVELOPER")
+
+                        // ✅ Demo endpoints
+                        .requestMatchers("/demo/**").permitAll()
+
+                        // ✅ Error page
+                        .requestMatchers("/error").permitAll()
+
+                        // Static resources
+                        .requestMatchers("/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
+
+                        .anyRequest().authenticated())
+                .logout(logout -> logout
+                        .logoutUrl("/logout")
+                        .logoutSuccessUrl("/portal/login?logout")
+                        .invalidateHttpSession(true)
+                        .deleteCookies("JSESSIONID"))
+                .cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }
