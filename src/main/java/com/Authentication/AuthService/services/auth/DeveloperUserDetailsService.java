@@ -1,7 +1,10 @@
 package com.Authentication.AuthService.services.auth;
 
 import com.Authentication.AuthService.entity.Developer; // <-- Import entity của bạn
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.DeveloperRepository; // <-- Import repo của bạn
+import com.Authentication.AuthService.repository.UserRepository;
+
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -10,11 +13,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class DeveloperUserDetailsService implements UserDetailsService {
 
-    private final DeveloperRepository developerRepository;
+    private final UserRepository userRepository;
 
     // Tiêm (inject) Repository vào Service
-    public DeveloperUserDetailsService(DeveloperRepository developerRepository) {
-        this.developerRepository = developerRepository;
+    public DeveloperUserDetailsService(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     /**
@@ -25,11 +28,11 @@ public class DeveloperUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         
         // Dùng repository để tìm user bằng email
-        Developer developer = developerRepository.findByEmail(username)
+        User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> 
                         new UsernameNotFoundException("Không tìm thấy user: " + username)
                 );
         
-        return developer; // Trả về đối tượng Developer (vì nó implement UserDetails)
+        return user; // Trả về đối tượng Developer (vì nó implement UserDetails)
     }
 }

@@ -5,6 +5,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.Authentication.AuthService.dto.FaceAuthLoginRequestDto;
 import com.Authentication.AuthService.entity.User;
+import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
 import com.Authentication.AuthService.services.auth.JwtService;
@@ -46,6 +48,7 @@ public class OAuth2AuthorizationController {
     private final TokenService tokenService;
     private final JwtService jwtService;
     private final UserService userService;
+    private final UserRepository userRepository;
 
     @GetMapping("/authorize")
     public String authorize(
@@ -155,17 +158,34 @@ public class OAuth2AuthorizationController {
             }
 
             // 3. Gọi Server A để verify face
-            log.info("Đang gọi Server A để xác thực khuôn mặt cho user: {}", request.getUsername());
-            boolean verifySuccess = faceAuthService.verifyUser(request.getUsername());
+            // log.info("Đang gọi Server A để xác thực khuôn mặt cho user: {}", request.getUsername());
 
-            if (!verifySuccess) {
-                log.warn("Xác thực khuôn mặt thất bại cho user: {}", request.getUsername());
-                redirectWithError(response, request.getRedirectUri(), "access_denied",
-                        "Xác thực khuôn mặt thất bại", request.getState());
-                return;
-            }
+            // Optional<User> faceDataOpt = userRepository.findByUsername(request.getUsername());
 
-            log.info("Xác thực khuôn mặt thành công cho user: {}", request.getUsername());
+            // if (!faceDataOpt.isPresent()) {
+            //     log.error("Không tìm thấy dữ liệu khuôn mặt cho user: {}", request.getUsername());
+            //     redirectWithError(response, request.getRedirectUri(), "access_denied",
+            //             "Người dùng chưa đăng ký khuôn mặt", request.getState());
+            //     return;
+            // }
+
+            // User faceData = faceDataOpt.get();
+
+            // // Gọi đúng method verifyUser với đầy đủ tham số
+            // boolean verifySuccess = faceAuthService.verifyUser(
+            //         request.getUsername(),
+            //         faceData.getHelperData(), // helper_data_b64
+            //         faceData.getKeyHash() // key_hash_b64
+            // );
+
+            // if (!verifySuccess) {
+            //     log.warn("Xác thực khuôn mặt thất bại cho user: {}", request.getUsername());
+            //     redirectWithError(response, request.getRedirectUri(), "access_denied",
+            //             "Xác thực khuôn mặt thất bại", request.getState());
+            //     return;
+            // }
+
+            // log.info("Xác thực khuôn mặt thành công cho user: {}", request.getUsername());
 
             // Chuẩn hóa các tham số tuỳ chọn trước khi lưu
             String sanitizedNonce = StringUtils.hasText(request.getNonce()) ? request.getNonce() : null;
@@ -390,7 +410,7 @@ public class OAuth2AuthorizationController {
 
             // Optional claims
             // if (user.getPicture() != null) {
-            //     userInfo.put("picture", user.getPicture());
+            // userInfo.put("picture", user.getPicture());
             // }
 
             log.info("UserInfo returned for user: {}", username);

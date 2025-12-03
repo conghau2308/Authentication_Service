@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.Authentication.AuthService.dto.CreateClientDto;
 import com.Authentication.AuthService.entity.ClientOwnerShip;
-import com.Authentication.AuthService.entity.Developer;
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.ClientOwnerShipRepository;
 
 
@@ -34,7 +34,7 @@ public class ClientManagementService {
     }
 
     @Transactional
-    public RegisteredClient createClient(CreateClientDto dto, Developer developer) {
+    public RegisteredClient createClient(CreateClientDto dto, User developer) {
         String clientId = UUID.randomUUID().toString();
         String rawSecret = UUID.randomUUID().toString();
         String encodedSecret = passwordEncoder.encode(rawSecret);

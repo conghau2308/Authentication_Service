@@ -18,4 +18,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Kiểm tra user có tồn tại theo username
      */
     boolean existsByUsername(String username);
+
+    boolean existsByEmail(String email);
 }
