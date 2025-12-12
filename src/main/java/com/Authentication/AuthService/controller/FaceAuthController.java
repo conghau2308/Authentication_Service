@@ -3,6 +3,7 @@ package com.Authentication.AuthService.controller;
 import com.Authentication.AuthService.dto.ApiResponseDto;
 import com.Authentication.AuthService.dto.EnrollRequestDto;
 import com.Authentication.AuthService.dto.EnrollResponseDto;
+import com.Authentication.AuthService.dto.VerifyRequestDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
@@ -31,257 +32,290 @@ import java.util.Optional;
 @Slf4j
 @RequiredArgsConstructor
 public class FaceAuthController {
-    private final FaceAuthService faceAuthService;
-    private final UserRepository userRepository;
+        private final FaceAuthService faceAuthService;
+        private final UserRepository userRepository;
 
-    /**
-     * Endpoint đăng ký khuôn mặt (Blocking)
-     */
-    @PostMapping("/enroll")
-    public ResponseEntity<ApiResponseDto> enrollFace(@Valid @RequestBody EnrollRequestDto request) {
-        log.info("📝 Nhận yêu cầu đăng ký khuôn mặt cho user: {} (name: {}, email: {})",
-                request.getUsername(), request.getName(), request.getEmail());
+        /**
+         * Endpoint đăng ký khuôn mặt (Blocking)
+         */
+        @PostMapping("/enroll")
+        public ResponseEntity<ApiResponseDto> enrollFace(@Valid @RequestBody EnrollRequestDto request) {
+                log.info("📝 Nhận yêu cầu đăng ký khuôn mặt cho user: {} (name: {}, email: {})",
+                                request.getUsername(), request.getName(), request.getEmail());
 
-        try {
-            if (userRepository.existsByUsername(request.getUsername())) {
-                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                        .success(false)
-                        .message("Username đã được sử dụng")
-                        .build());
-            }
+                try {
+                        if (userRepository.existsByUsername(request.getUsername())) {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Username đã được sử dụng")
+                                                .errorCode("USERNAME_EXISTS")
+                                                .build());
+                        }
 
-            if (userRepository.existsByEmail(request.getEmail())) {
-                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                        .success(false)
-                        .message("Email đã được sử dụng")
-                        .build());
-            }
+                        if (userRepository.existsByEmail(request.getEmail())) {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Email đã được sử dụng")
+                                                .errorCode("EMAIL_EXISTS")
+                                                .build());
+                        }
 
-            EnrollResponseDto enrollResponse = faceAuthService.enrollUser(request.getUsername());
+                        // Validate ảnh
+                        if (request.getImage_b64() == null || request.getImage_b64().isEmpty()) {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Vui lòng gửi ảnh khuôn mặt")
+                                                .errorCode("IMAGE_REQUIRED")
+                                                .build());
+                        }
 
-            if (enrollResponse != null) {
-                User user = User.builder()
-                        .username(request.getUsername())
-                        .name(request.getName())
-                        .email(request.getEmail())
-                        .helperData(enrollResponse.getHelper_data_b64())
-                        .keyHash(enrollResponse.getKey_hash_b64())
-                        .build();
+                        EnrollResponseDto enrollResponse = faceAuthService.enrollUser(request.getUsername(),
+                                        request.getImage_b64());
 
-                userRepository.save(user);
+                        if (enrollResponse != null) {
+                                User user = User.builder()
+                                                .username(request.getUsername())
+                                                .name(request.getName())
+                                                .email(request.getEmail())
+                                                .helperData(enrollResponse.getHelper_data_b64())
+                                                .keyHash(enrollResponse.getKey_hash_b64())
+                                                .build();
 
-                log.info("✅ Đăng ký khuôn mặt thành công và đã lưu DB cho user: {}", request.getUsername());
+                                userRepository.save(user);
 
-                return ResponseEntity.ok(ApiResponseDto.builder()
-                        .success(true)
-                        .message("Đăng ký khuôn mặt thành công")
-                        .build());
-            } else {
-                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                        .success(false)
-                        .message("Đăng ký khuôn mặt thất bại. Vui lòng thử lại.")
-                        .build());
-            }
+                                log.info("✅ Đăng ký khuôn mặt thành công và đã lưu DB cho user: {}",
+                                                request.getUsername());
+                                log.info("helper data", user.getHelperData());
 
-        } catch (Exception e) {
-            log.error("❌ Lỗi khi đăng ký khuôn mặt: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(ApiResponseDto.builder()
-                    .success(false)
-                    .message("Lỗi server: " + e.getMessage())
-                    .build());
-        }
-    }
+                                return ResponseEntity.ok(ApiResponseDto.builder()
+                                                .success(true)
+                                                .message("Đăng ký khuôn mặt thành công")
+                                                .build());
+                        } else {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Đăng ký khuôn mặt thất bại. Vui lòng thử lại.")
+                                                .errorCode("FAILED")
+                                                .build());
+                        }
 
-    /**
-     * ✅ Endpoint verify khuôn mặt - FIXED SESSION PERSISTENCE
-     */
-    @PostMapping("/verify/{username}")
-    public ResponseEntity<ApiResponseDto> verifyFace(
-            @PathVariable String username,
-            HttpServletRequest request) {
-
-        log.info("🔍 Nhận yêu cầu xác thực khuôn mặt cho user: {}", username);
-
-        try {
-            Optional<User> userOpt = userRepository.findByUsername(username);
-
-            if (userOpt.isEmpty()) {
-                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                        .success(false)
-                        .message("User chưa đăng ký khuôn mặt")
-                        .build());
-            }
-
-            User user = userOpt.get();
-
-            boolean verified = faceAuthService.verifyUser(
-                    username,
-                    user.getHelperData(),
-                    user.getKeyHash());
-
-            // Nhớ sửa lại verified
-            if (verified) {
-                user.setLastVerifiedAt(LocalDateTime.now());
-                userRepository.save(user);
-
-                // ✅ TẠO AUTHENTICATION VỚI USER ENTITY TRỰC TIẾP
-                Authentication authentication = new UsernamePasswordAuthenticationToken(
-                        user, // ✅ Dùng User entity trực tiếp, không qua UserDetailsService
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_USER")));
-
-                // ✅ Tạo SecurityContext mới
-                SecurityContext context = SecurityContextHolder.createEmptyContext();
-                context.setAuthentication(authentication);
-                SecurityContextHolder.setContext(context);
-
-                // ✅ Tạo session mới và lưu context
-                HttpSession session = request.getSession(true);
-                session.setAttribute(
-                        HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                        context);
-
-                // ✅ Log chi tiết để debug
-                log.info("✅ Session created:");
-                log.info("   - Session ID: {}", session.getId());
-                log.info("   - Max Inactive Interval: {} seconds", session.getMaxInactiveInterval());
-                log.info("   - Creation Time: {}", new java.util.Date(session.getCreationTime()));
-                log.info("   - Is New: {}", session.isNew());
-                log.info("   - User: {} (ID: {})", user.getUsername(), user.getId());
-                log.info("   - Authentication: {}", authentication.getName());
-                log.info("   - Authorities: {}", authentication.getAuthorities());
-
-                return ResponseEntity.ok(ApiResponseDto.builder()
-                        .success(true)
-                        .message("Xác thực khuôn mặt thành công")
-                        .build());
-            } else {
-                return ResponseEntity.ok(ApiResponseDto.builder()
-                        .success(false)
-                        .message("Xác thực khuôn mặt thất bại")
-                        .build());
-            }
-
-        } catch (Exception e) {
-            log.error("❌ Lỗi khi xác thực khuôn mặt: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(ApiResponseDto.builder()
-                    .success(false)
-                    .message("Lỗi server: " + e.getMessage())
-                    .build());
-        }
-    }
-
-    /**
-     * Endpoint đăng ký khuôn mặt (Non-blocking Reactive)
-     */
-    @PostMapping("/enroll-async")
-    public Mono<ResponseEntity<ApiResponseDto>> enrollFaceAsync(@Valid @RequestBody EnrollRequestDto request) {
-        log.info("📝 [ASYNC] Nhận yêu cầu đăng ký khuôn mặt cho user: {} (name: {}, email: {})",
-                request.getUsername(), request.getName(), request.getEmail());
-
-        if (userRepository.existsByUsername(request.getUsername())) {
-            return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                    .success(false)
-                    .message("Username đã được sử dụng")
-                    .build()));
+                } catch (Exception e) {
+                        log.error("❌ Lỗi khi đăng ký khuôn mặt: {}", e.getMessage(), e);
+                        return ResponseEntity.internalServerError().body(ApiResponseDto.builder()
+                                        .success(false)
+                                        .message("Lỗi server: " + e.getMessage())
+                                        .errorCode("SYSTEM_ERROR")
+                                        .build());
+                }
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                    .success(false)
-                    .message("Email đã được sử dụng")
-                    .build()));
+        /**
+         * ✅ Endpoint verify khuôn mặt - FIXED SESSION PERSISTENCE
+         */
+        @PostMapping("/verify/{username}")
+        public ResponseEntity<ApiResponseDto> verifyFace(
+                        @PathVariable String username,
+                        @Valid @RequestBody VerifyRequestDto request,
+                        HttpServletRequest httpRequest) {
+
+                log.info("🔍 Nhận yêu cầu xác thực khuôn mặt cho user: {}", username);
+
+                try {
+                        Optional<User> userOpt = userRepository.findByUsername(username);
+
+                        if (userOpt.isEmpty()) {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("User chưa đăng ký khuôn mặt")
+                                                .errorCode("USER_NOT_FOUND")
+                                                .build());
+                        }
+
+                        // Validate ảnh
+                        if (request.getImageBase64() == null || request.getImageBase64().isEmpty()) {
+                                return ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Vui lòng gửi ảnh khuôn mặt")
+                                                .errorCode("IMAGE_REQUIRED")
+                                                .build());
+                        }
+
+                        User user = userOpt.get();
+
+                        boolean verified = faceAuthService.verifyUser(
+                                        username,
+                                        request.getImageBase64(),
+                                        user.getHelperData(),
+                                        user.getKeyHash());
+
+                        // Nhớ sửa lại verified
+                        if (verified) {
+                                user.setLastVerifiedAt(LocalDateTime.now());
+                                userRepository.save(user);
+
+                                // ✅ TẠO AUTHENTICATION VỚI USER ENTITY TRỰC TIẾP
+                                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                                user, // ✅ Dùng User entity trực tiếp, không qua UserDetailsService
+                                                null,
+                                                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+                                // ✅ Tạo SecurityContext mới
+                                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                                context.setAuthentication(authentication);
+                                SecurityContextHolder.setContext(context);
+
+                                // ✅ Tạo session mới và lưu context
+                                HttpSession session = httpRequest.getSession(true);
+                                session.setAttribute(
+                                                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                                                context);
+
+                                // ✅ Log chi tiết để debug
+                                log.info("✅ Session created:");
+                                log.info("   - Session ID: {}", session.getId());
+                                log.info("   - Max Inactive Interval: {} seconds", session.getMaxInactiveInterval());
+                                log.info("   - Creation Time: {}", new java.util.Date(session.getCreationTime()));
+                                log.info("   - Is New: {}", session.isNew());
+                                log.info("   - User: {} (ID: {})", user.getUsername(), user.getId());
+                                log.info("   - Authentication: {}", authentication.getName());
+                                log.info("   - Authorities: {}", authentication.getAuthorities());
+
+                                return ResponseEntity.ok(ApiResponseDto.builder()
+                                                .success(true)
+                                                .message("Xác thực khuôn mặt thành công")
+                                                .build());
+                        } else {
+                                return ResponseEntity.ok(ApiResponseDto.builder()
+                                                .success(false)
+                                                .message("Khuôn mặt không khớp. Vui lòng thử lại.")
+                                                .errorCode("FACE_NOT_MATCH")
+                                                .build());
+                        }
+
+                } catch (Exception e) {
+                        log.error("❌ Lỗi khi xác thực khuôn mặt: {}", e.getMessage(), e);
+                        return ResponseEntity.internalServerError().body(ApiResponseDto.builder()
+                                        .success(false)
+                                        .message("Lỗi server: " + e.getMessage())
+                                        .errorCode("SYSTEM_ERROR")
+                                        .build());
+                }
         }
 
-        return faceAuthService.enrollUserAsync(request.getUsername())
-                .flatMap(enrollResponse -> {
-                    User user = User.builder()
-                            .username(request.getUsername())
-                            .name(request.getName())
-                            .email(request.getEmail())
-                            .helperData(enrollResponse.getHelper_data_b64())
-                            .keyHash(enrollResponse.getKey_hash_b64())
-                            .build();
+        /**
+         * Endpoint đăng ký khuôn mặt (Non-blocking Reactive)
+         */
+        @PostMapping("/enroll-async")
+        public Mono<ResponseEntity<ApiResponseDto>> enrollFaceAsync(@Valid @RequestBody EnrollRequestDto request) {
+                log.info("📝 [ASYNC] Nhận yêu cầu đăng ký khuôn mặt cho user: {} (name: {}, email: {})",
+                                request.getUsername(), request.getName(), request.getEmail());
 
-                    userRepository.save(user);
+                if (userRepository.existsByUsername(request.getUsername())) {
+                        return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                        .success(false)
+                                        .message("Username đã được sử dụng")
+                                        .build()));
+                }
 
-                    log.info("✅ [ASYNC] Đăng ký khuôn mặt thành công và đã lưu DB cho user: {}", request.getUsername());
+                if (userRepository.existsByEmail(request.getEmail())) {
+                        return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                        .success(false)
+                                        .message("Email đã được sử dụng")
+                                        .build()));
+                }
 
-                    return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
-                            .success(true)
-                            .message("Đăng ký khuôn mặt thành công")
-                            .build()));
-                })
-                .onErrorResume(error -> {
-                    log.error("❌ [ASYNC] Lỗi khi đăng ký khuôn mặt: {}", error.getMessage());
-                    return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                            .success(false)
-                            .message("Đăng ký khuôn mặt thất bại: " + error.getMessage())
-                            .build()));
-                });
-    }
+                return faceAuthService.enrollUserAsync(request.getUsername())
+                                .flatMap(enrollResponse -> {
+                                        User user = User.builder()
+                                                        .username(request.getUsername())
+                                                        .name(request.getName())
+                                                        .email(request.getEmail())
+                                                        .helperData(enrollResponse.getHelper_data_b64())
+                                                        .keyHash(enrollResponse.getKey_hash_b64())
+                                                        .build();
 
-    /**
-     * Endpoint verify async
-     */
-    @PostMapping("/verify-async/{username}")
-    public Mono<ResponseEntity<ApiResponseDto>> verifyFaceAsync(
-            @PathVariable String username,
-            HttpServletRequest request) {
+                                        userRepository.save(user);
 
-        log.info("🔍 [ASYNC] Nhận yêu cầu xác thực khuôn mặt cho user: {}", username);
+                                        log.info("✅ [ASYNC] Đăng ký khuôn mặt thành công và đã lưu DB cho user: {}",
+                                                        request.getUsername());
 
-        Optional<User> userOpt = userRepository.findByUsername(username);
-
-        if (userOpt.isEmpty()) {
-            return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
-                    .success(false)
-                    .message("User chưa đăng ký khuôn mặt")
-                    .build()));
+                                        return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
+                                                        .success(true)
+                                                        .message("Đăng ký khuôn mặt thành công")
+                                                        .build()));
+                                })
+                                .onErrorResume(error -> {
+                                        log.error("❌ [ASYNC] Lỗi khi đăng ký khuôn mặt: {}", error.getMessage());
+                                        return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
+                                                        .success(false)
+                                                        .message("Đăng ký khuôn mặt thất bại: " + error.getMessage())
+                                                        .build()));
+                                });
         }
 
-        User user = userOpt.get();
+        /**
+         * Endpoint verify async
+         */
+        // @PostMapping("/verify-async/{username}")
+        // public Mono<ResponseEntity<ApiResponseDto>> verifyFaceAsync(
+        //                 @PathVariable String username,
+        //                 HttpServletRequest request) {
 
-        return faceAuthService.verifyUserAsync(username, user.getHelperData(), user.getKeyHash())
-                .flatMap(verified -> {
-                    if (verified) {
-                        user.setLastVerifiedAt(LocalDateTime.now());
-                        userRepository.save(user);
+        //         log.info("🔍 [ASYNC] Nhận yêu cầu xác thực khuôn mặt cho user: {}", username);
 
-                        // Tạo authentication và session
-                        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                                user,
-                                null,
-                                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        //         Optional<User> userOpt = userRepository.findByUsername(username);
 
-                        SecurityContext context = SecurityContextHolder.createEmptyContext();
-                        context.setAuthentication(authentication);
-                        SecurityContextHolder.setContext(context);
+        //         if (userOpt.isEmpty()) {
+        //                 return Mono.just(ResponseEntity.badRequest().body(ApiResponseDto.builder()
+        //                                 .success(false)
+        //                                 .message("User chưa đăng ký khuôn mặt")
+        //                                 .build()));
+        //         }
 
-                        HttpSession session = request.getSession(true);
-                        session.setAttribute(
-                                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                                context);
+        //         User user = userOpt.get();
 
-                        log.info("✅ [ASYNC] Xác thực khuôn mặt thành công và đã tạo session cho user: {}", username);
+        //         return faceAuthService.verifyUserAsync(username, user.getHelperData(), user.getKeyHash())
+        //                         .flatMap(verified -> {
+        //                                 if (verified) {
+        //                                         user.setLastVerifiedAt(LocalDateTime.now());
+        //                                         userRepository.save(user);
 
-                        return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
-                                .success(true)
-                                .message("Xác thực khuôn mặt thành công")
-                                .build()));
-                    } else {
-                        return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
-                                .success(false)
-                                .message("Xác thực khuôn mặt thất bại")
-                                .build()));
-                    }
-                })
-                .onErrorResume(error -> {
-                    log.error("❌ [ASYNC] Lỗi khi xác thực khuôn mặt: {}", error.getMessage());
-                    return Mono.just(ResponseEntity.internalServerError().body(ApiResponseDto.builder()
-                            .success(false)
-                            .message("Lỗi server: " + error.getMessage())
-                            .build()));
-                });
-    }
+        //                                         // Tạo authentication và session
+        //                                         Authentication authentication = new UsernamePasswordAuthenticationToken(
+        //                                                         user,
+        //                                                         null,
+        //                                                         List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+        //                                         SecurityContext context = SecurityContextHolder.createEmptyContext();
+        //                                         context.setAuthentication(authentication);
+        //                                         SecurityContextHolder.setContext(context);
+
+        //                                         HttpSession session = request.getSession(true);
+        //                                         session.setAttribute(
+        //                                                         HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+        //                                                         context);
+
+        //                                         log.info("✅ [ASYNC] Xác thực khuôn mặt thành công và đã tạo session cho user: {}",
+        //                                                         username);
+
+        //                                         return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
+        //                                                         .success(true)
+        //                                                         .message("Xác thực khuôn mặt thành công")
+        //                                                         .build()));
+        //                                 } else {
+        //                                         return Mono.just(ResponseEntity.ok(ApiResponseDto.builder()
+        //                                                         .success(false)
+        //                                                         .message("Xác thực khuôn mặt thất bại")
+        //                                                         .build()));
+        //                                 }
+        //                         })
+        //                         .onErrorResume(error -> {
+        //                                 log.error("❌ [ASYNC] Lỗi khi xác thực khuôn mặt: {}", error.getMessage());
+        //                                 return Mono.just(ResponseEntity.internalServerError()
+        //                                                 .body(ApiResponseDto.builder()
+        //                                                                 .success(false)
+        //                                                                 .message("Lỗi server: " + error.getMessage())
+        //                                                                 .build()));
+        //                         });
+        // }
 }

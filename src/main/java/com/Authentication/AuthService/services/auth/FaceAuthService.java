@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import com.Authentication.AuthService.dto.EnrollRequestWiFaKeyDto;
 import com.Authentication.AuthService.dto.EnrollResponseDto;
 import com.Authentication.AuthService.dto.VerifyRequestDto;
 import com.Authentication.AuthService.dto.VerifyResponseDto;
@@ -31,13 +32,16 @@ public class FaceAuthService {
      * Đăng ký khuôn mặt người dùng-Gọi Python API
      */
 
-    public EnrollResponseDto enrollUser(String username) {
+    public EnrollResponseDto enrollUser(String username, String imageBase64) {
         log.info("🔵 Đang gọi Python API enroll cho user: {}", username);
+
+        EnrollRequestWiFaKeyDto enrollRequestWiFaKeyDto = new EnrollRequestWiFaKeyDto(imageBase64);
 
         try {
             EnrollResponseDto response = webClient.post()
                     .uri("/enroll/{username}", username)
                     .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(enrollRequestWiFaKeyDto)
                     .retrieve()
                     .onStatus(
                             status -> status.is4xxClientError() || status.is5xxServerError(),
@@ -76,11 +80,11 @@ public class FaceAuthService {
     /**
      * Xác thực khuôn mặt người dùng - Gọi Python API
      */
-    public boolean verifyUser(String username, String helperDataB64, String keyHashB64) {
+    public boolean verifyUser(String username, String imageBase64, String helperDataB64, String keyHashB64) {
         log.info("🟢 Đang gọi Python API verify cho user: {}", username);
 
         try {
-            VerifyRequestDto verifyRequest = new VerifyRequestDto(helperDataB64, keyHashB64);
+            VerifyRequestDto verifyRequest = new VerifyRequestDto(helperDataB64, keyHashB64, imageBase64);
 
             VerifyResponseDto response = webClient.post()
                     .uri("/verify/{username}", username)
@@ -144,10 +148,10 @@ public class FaceAuthService {
     /**
      * Xác thực bất đồng bộ (Non-blocking)
      */
-    public Mono<Boolean> verifyUserAsync(String username, String helperDataB64, String keyHashB64) {
+    public Mono<Boolean> verifyUserAsync(String username, String imageBase64, String helperDataB64, String keyHashB64) {
         log.info("🟢 [ASYNC] Đang gọi Python API verify cho user: {}", username);
 
-        VerifyRequestDto verifyRequest = new VerifyRequestDto(helperDataB64, keyHashB64);
+        VerifyRequestDto verifyRequest = new VerifyRequestDto(imageBase64, helperDataB64, keyHashB64);
 
         return webClient.post()
                 .uri("/verify/{username}", username)

@@ -1,6 +1,5 @@
 package com.Authentication.AuthService.controller;
 
-import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -11,17 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
-import com.Authentication.AuthService.dto.FaceAuthLoginRequestDto;
+import com.Authentication.AuthService.dto.AuthenticateRequestDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
@@ -32,195 +24,225 @@ import com.Authentication.AuthService.services.user.UserService;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Controller
+@RestController
 @RequestMapping("/oauth2")
 @RequiredArgsConstructor
 @Slf4j
-public class OAuth2AuthorizationController {
+@CrossOrigin(origins = "http://localhost:3000") // Frontend URL
+public class OAuth2AuthentizationController {
 
     private final RegisteredClientRepository registeredClientRepository;
-    private final FaceAuthService faceAuthService;
     private final AuthorizationCodeService authorizationCodeService;
+    private final FaceAuthService faceAuthService;
+    private final UserRepository userRepository;
     private final TokenService tokenService;
     private final JwtService jwtService;
     private final UserService userService;
-    private final UserRepository userRepository;
 
-    @GetMapping("/authorize")
-    public String authorize(
+    /**
+     * API 1: Validate OAuth parameters
+     * Frontend gọi API này khi page load để validate trước khi hiển thị UI
+     */
+    @GetMapping("/authorize/validate")
+    public ResponseEntity<Map<String, Object>> validateAuthorization(
             @RequestParam("client_id") String clientId,
             @RequestParam("redirect_uri") String redirectUri,
             @RequestParam(value = "scope", defaultValue = "openid profile") String scope,
+            @RequestParam(value = "response_type", defaultValue = "code") String responseType,
             @RequestParam(value = "state", required = false) String state,
             @RequestParam(value = "nonce", required = false) String nonce,
             @RequestParam(value = "code_challenge", required = false) String codeChallenge,
-            @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
-            @RequestParam(value = "response_type", defaultValue = "code") String responseType,
-            Model model,
-            HttpServletResponse response) throws IOException {
+            @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod) {
 
-        log.info("Nhận yêu cầu authorize - client_id: {}, redirect_uri: {}", clientId, redirectUri);
+        log.info("Validating OAuth request - client_id: {}, redirect_uri: {}", clientId, redirectUri);
 
         // 1. Validate response_type
         if (!"code".equals(responseType)) {
-            log.error("Response type không được hỗ trợ: {}", responseType);
-            return redirectError(response, redirectUri, "unsupported_response_type",
-                    "Chỉ hỗ trợ response_type=code", state);
+            log.error("Unsupported response_type: {}", responseType);
+            return ResponseEntity
+                    .badRequest()
+                    .body(createValidationError("unsupported_response_type",
+                            "Only response_type=code is supported", null, null));
         }
 
-        // 2. Tìm RegisteredClient
-        RegisteredClient registeredClient = registeredClientRepository.findByClientId(clientId);
-        if (registeredClient == null) {
-            log.error("Client không tồn tại: {}", clientId);
-            return redirectError(response, redirectUri, "invalid_client",
-                    "Client ID không hợp lệ", state);
+        // 2. Validate client_id
+        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
+        if (client == null) {
+            log.error("Invalid client_id: {}", clientId);
+            return ResponseEntity
+                    .badRequest()
+                    .body(createValidationError("invalid_client",
+                            "Client ID not found", null, null));
         }
 
-        // 3. Validate redirect_uri
-        if (!registeredClient.getRedirectUris().contains(redirectUri)) {
-            log.error("Redirect URI không hợp lệ: {}. Registered URIs: {}",
-                    redirectUri, registeredClient.getRedirectUris());
-            model.addAttribute("error", "invalid_redirect_uri");
-            model.addAttribute("error_description", "Redirect URI không được đăng ký");
-            return "error";
+        // 3. Validate redirect_uri (CRITICAL!)
+        if (!client.getRedirectUris().contains(redirectUri)) {
+            log.error("Invalid redirect_uri: {}. Registered: {}",
+                    redirectUri, client.getRedirectUris());
+            // KHÔNG trả redirect_uri nếu nó không hợp lệ (security!)
+            return ResponseEntity
+                    .badRequest()
+                    .body(createValidationError("invalid_redirect_uri",
+                            "The redirect URI is not registered for this client", null, null));
         }
 
         // 4. Validate scope
         String[] requestedScopes = scope.split(" ");
         for (String requestedScope : requestedScopes) {
-            if (!registeredClient.getScopes().contains(requestedScope)) {
-                log.error("Scope không hợp lệ: {}", requestedScope);
-                return redirectError(response, redirectUri, "invalid_scope",
-                        "Scope '" + requestedScope + "' không được phép", state);
+            if (!client.getScopes().contains(requestedScope)) {
+                log.error("Invalid scope: {}", requestedScope);
+                // redirect_uri đã valid, có thể trả về để frontend redirect
+                return ResponseEntity
+                        .badRequest()
+                        .body(createValidationError("invalid_scope",
+                                "Scope '" + requestedScope + "' is not allowed",
+                                redirectUri, state));
             }
         }
 
-        // 5. Validate các tham số PKCE nếu có
+        // 5. Validate PKCE nếu có
         if (StringUtils.hasText(codeChallenge) && !StringUtils.hasText(codeChallengeMethod)) {
             codeChallengeMethod = "plain";
         }
 
-        if (!StringUtils.hasText(codeChallenge) && StringUtils.hasText(codeChallengeMethod)) {
-            log.error("Thiếu code_challenge khi client gửi code_challenge_method");
-            return redirectError(response, redirectUri, "invalid_request",
-                    "code_challenge là bắt buộc khi client gửi code_challenge_method", state);
+        if (StringUtils.hasText(codeChallengeMethod) &&
+                !isSupportedCodeChallengeMethod(codeChallengeMethod)) {
+            log.error("Unsupported code_challenge_method: {}", codeChallengeMethod);
+            return ResponseEntity
+                    .badRequest()
+                    .body(createValidationError("invalid_request",
+                            "code_challenge_method must be 'plain' or 'S256'",
+                            redirectUri, state));
         }
 
-        if (StringUtils.hasText(codeChallengeMethod) && !isSupportedCodeChallengeMethod(codeChallengeMethod)) {
-            log.error("code_challenge_method không được hỗ trợ: {}", codeChallengeMethod);
-            return redirectError(response, redirectUri, "invalid_request",
-                    "code_challenge_method chỉ hỗ trợ plain hoặc S256", state);
+        // 6. Validate nonce nếu scope có "openid" (OIDC requirement)
+        boolean hasOpenIdScope = scope.contains("openid");
+        if (hasOpenIdScope && !StringUtils.hasText(nonce)) {
+            log.warn("Missing nonce parameter for OpenID Connect request");
+            // Nonce là recommended nhưng không bắt buộc theo spec
+            // Nếu muốn bắt buộc, uncomment dòng dưới:
+            // return ResponseEntity.badRequest()
+            // .body(createValidationError("invalid_request",
+            // "nonce is required for OpenID Connect requests",
+            // redirectUri, state));
         }
 
-        // 6. Lưu thông tin vào model
-        model.addAttribute("client_id", clientId);
-        model.addAttribute("redirect_uri", redirectUri);
-        model.addAttribute("scope", scope);
-        model.addAttribute("state", state != null ? state : "");
-        model.addAttribute("nonce", nonce != null ? nonce : "");
-        model.addAttribute("code_challenge", codeChallenge != null ? codeChallenge : "");
-        model.addAttribute("code_challenge_method", codeChallengeMethod != null ? codeChallengeMethod : "");
-        model.addAttribute("client_name", registeredClient.getClientName());
+        // 7. ALL VALIDATIONS PASSED
+        log.info("OAuth validation successful for client: {}", client.getClientName());
 
-        log.info("Hiển thị form Face Authentication cho client: {}", registeredClient.getClientName());
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", true);
+        response.put("client_name", client.getClientName());
+        response.put("client_id", clientId);
+        response.put("scopes", requestedScopes);
 
-        return "face-login";
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/face-auth/login")
-    public void faceAuthLogin(
-            @ModelAttribute FaceAuthLoginRequestDto request,
-            HttpServletResponse response) throws IOException {
+    /**
+     * API 2: Authenticate user với face recognition
+     * Frontend gọi API này sau khi user nhập username và chụp ảnh
+     */
+    @PostMapping("/authenticate")
+    public ResponseEntity<Map<String, Object>> authenticate(
+            @RequestBody AuthenticateRequestDto request) {
 
-        log.info("Nhận yêu cầu face-auth login - username: {}, client_id: {}",
+        log.info("Authentication request - username: {}, client_id: {}",
                 request.getUsername(), request.getClientId());
 
         try {
-            // 1. Validate client_id
-            RegisteredClient registeredClient = registeredClientRepository.findByClientId(request.getClientId());
-            if (registeredClient == null) {
-                log.error("Client không tồn tại: {}", request.getClientId());
-                redirectWithError(response, request.getRedirectUri(), "invalid_client",
-                        "Client không hợp lệ", request.getState());
-                return;
+            // 1. Re-validate client và redirect_uri (security best practice)
+            RegisteredClient client = registeredClientRepository.findByClientId(request.getClientId());
+            if (client == null) {
+                log.error("Invalid client_id: {}", request.getClientId());
+                return ResponseEntity
+                        .badRequest()
+                        .body(createAuthError("invalid_client",
+                                "Invalid client", null, null));
             }
 
-            // 2. Validate redirect_uri
-            if (!registeredClient.getRedirectUris().contains(request.getRedirectUri())) {
-                log.error("Redirect URI không hợp lệ: {}", request.getRedirectUri());
-                redirectWithError(response, request.getRedirectUri(), "invalid_redirect_uri",
-                        "Redirect URI không hợp lệ", request.getState());
-                return;
+            if (!client.getRedirectUris().contains(request.getRedirectUri())) {
+                log.error("Invalid redirect_uri: {}", request.getRedirectUri());
+                return ResponseEntity
+                        .badRequest()
+                        .body(createAuthError("invalid_request",
+                                "Invalid redirect URI", null, null));
             }
 
             // 3. Gọi Server A để verify face
-            // log.info("Đang gọi Server A để xác thực khuôn mặt cho user: {}", request.getUsername());
+            log.info("Đang gọi Server A để xác thực khuôn mặt cho user: {}",
+                    request.getUsername());
 
-            // Optional<User> faceDataOpt = userRepository.findByUsername(request.getUsername());
+            Optional<User> faceDataOpt = userRepository.findByUsername(request.getUsername());
 
-            // if (!faceDataOpt.isPresent()) {
-            //     log.error("Không tìm thấy dữ liệu khuôn mặt cho user: {}", request.getUsername());
-            //     redirectWithError(response, request.getRedirectUri(), "access_denied",
-            //             "Người dùng chưa đăng ký khuôn mặt", request.getState());
-            //     return;
-            // }
+            if (!faceDataOpt.isPresent()) {
+                log.error("Không tìm thấy dữ liệu khuôn mặt cho user: {}",
+                        request.getUsername());
+                return ResponseEntity
+                        .badRequest()
+                        .body(createAuthError("access_denied",
+                                "User has not enrolled their face", null, null));
+            }
 
-            // User faceData = faceDataOpt.get();
+            User faceData = faceDataOpt.get();
 
-            // // Gọi đúng method verifyUser với đầy đủ tham số
-            // boolean verifySuccess = faceAuthService.verifyUser(
-            //         request.getUsername(),
-            //         faceData.getHelperData(), // helper_data_b64
-            //         faceData.getKeyHash() // key_hash_b64
-            // );
+            // Gọi đúng method verifyUser với đầy đủ tham số
+            boolean authenticated = faceAuthService.verifyUser(
+                    request.getUsername(),
+                    request.getImage_b64(),
+                    faceData.getHelperData(), // helper_data_b64
+                    faceData.getKeyHash() // key_hash_b64
+            );
 
-            // if (!verifySuccess) {
-            //     log.warn("Xác thực khuôn mặt thất bại cho user: {}", request.getUsername());
-            //     redirectWithError(response, request.getRedirectUri(), "access_denied",
-            //             "Xác thực khuôn mặt thất bại", request.getState());
-            //     return;
-            // }
+            if (!authenticated) {
+                log.warn("Face authentication failed for user: {}", request.getUsername());
+                // Trả về error nhưng KHÔNG redirect ngay - cho phép user retry
+                return ResponseEntity
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body(createAuthError("access_denied",
+                                "Face authentication failed. Please try again.",
+                                request.getRedirectUri(),
+                                request.getState()));
+            }
 
-            // log.info("Xác thực khuôn mặt thành công cho user: {}", request.getUsername());
+            log.info("Face authentication successful for user: {}", request.getUsername());
 
-            // Chuẩn hóa các tham số tuỳ chọn trước khi lưu
-            String sanitizedNonce = StringUtils.hasText(request.getNonce()) ? request.getNonce() : null;
-            String sanitizedCodeChallenge = StringUtils.hasText(request.getCodeChallenge()) ? request.getCodeChallenge()
-                    : null;
-            String sanitizedCodeChallengeMethod = StringUtils.hasText(request.getCodeChallengeMethod())
-                    ? request.getCodeChallengeMethod()
-                    : null;
-
-            // 4. Tạo authorization_code
-            String authorizationCode = authorizationCodeService.generateAuthorizationCode(
+            // 3. Generate authorization code
+            String authCode = authorizationCodeService.generateAuthorizationCode(
                     request.getClientId(),
                     request.getUsername(),
                     request.getRedirectUri(),
                     request.getScope(),
                     request.getState(),
-                    sanitizedNonce,
-                    sanitizedCodeChallenge,
-                    sanitizedCodeChallengeMethod);
+                    request.getNonce(), // nonce for OIDC
+                    request.getCodeChallenge(),
+                    request.getCodeChallengeMethod());
 
-            log.info("Đã tạo authorization_code: {} cho user: {}", authorizationCode, request.getUsername());
+            log.info("Generated authorization code for user: {}", request.getUsername());
 
-            // 5. Redirect về Client với code
+            // 4. Trả về redirect URL
             String redirectUrl = buildSuccessRedirectUrl(
                     request.getRedirectUri(),
-                    authorizationCode,
+                    authCode,
                     request.getState());
 
-            log.info("Redirect về Client: {}", redirectUrl);
-            response.sendRedirect(redirectUrl);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("redirect_url", redirectUrl);
+
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            log.error("Lỗi trong quá trình face authentication: ", e);
-            redirectWithError(response, request.getRedirectUri(), "server_error",
-                    "Lỗi server khi xác thực", request.getState());
+            log.error("Authentication error: ", e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createAuthError("server_error",
+                            "Internal server error during authentication",
+                            request.getRedirectUri(),
+                            request.getState()));
         }
     }
 
@@ -429,12 +451,85 @@ public class OAuth2AuthorizationController {
 
     // ==================== Helper Methods ====================
 
+    /**
+     * Tạo error response cho validation endpoint
+     * Chỉ include redirect_uri nếu nó đã được validate
+     */
+    private Map<String, Object> createValidationError(
+            String error,
+            String errorDescription,
+            String redirectUri,
+            String state) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", false);
+        response.put("error", error);
+        response.put("error_description", errorDescription);
+
+        // Chỉ include redirect info nếu redirect_uri hợp lệ
+        if (redirectUri != null) {
+            String redirectUrl = buildErrorRedirectUrl(redirectUri, error, errorDescription, state);
+            response.put("redirect_url", redirectUrl);
+            response.put("should_redirect", true);
+        } else {
+            response.put("should_redirect", false);
+        }
+
+        return response;
+    }
+
+    /**
+     * Tạo error response cho authentication endpoint
+     */
+    private Map<String, Object> createAuthError(
+            String error,
+            String errorDescription,
+            String redirectUri,
+            String state) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("error", error);
+        response.put("error_description", errorDescription);
+
+        if (redirectUri != null) {
+            String redirectUrl = buildErrorRedirectUrl(redirectUri, error, errorDescription, state);
+            response.put("redirect_url", redirectUrl);
+        }
+
+        return response;
+    }
+
+    /**
+     * Build success redirect URL với authorization code
+     */
     private String buildSuccessRedirectUrl(String redirectUri, String code, String state) {
         StringBuilder url = new StringBuilder(redirectUri);
         url.append(redirectUri.contains("?") ? "&" : "?");
         url.append("code=").append(URLEncoder.encode(code, StandardCharsets.UTF_8));
 
-        if (state != null && !state.isEmpty()) {
+        if (StringUtils.hasText(state)) {
+            url.append("&state=").append(URLEncoder.encode(state, StandardCharsets.UTF_8));
+        }
+
+        return url.toString();
+    }
+
+    /**
+     * Build error redirect URL
+     */
+    private String buildErrorRedirectUrl(
+            String redirectUri,
+            String error,
+            String errorDescription,
+            String state) {
+
+        StringBuilder url = new StringBuilder(redirectUri);
+        url.append(redirectUri.contains("?") ? "&" : "?");
+        url.append("error=").append(URLEncoder.encode(error, StandardCharsets.UTF_8));
+        url.append("&error_description=").append(URLEncoder.encode(errorDescription, StandardCharsets.UTF_8));
+
+        if (StringUtils.hasText(state)) {
             url.append("&state=").append(URLEncoder.encode(state, StandardCharsets.UTF_8));
         }
 
@@ -443,36 +538,6 @@ public class OAuth2AuthorizationController {
 
     private boolean isSupportedCodeChallengeMethod(String method) {
         return "plain".equalsIgnoreCase(method) || "S256".equalsIgnoreCase(method);
-    }
-
-    private void redirectWithError(HttpServletResponse response, String redirectUri,
-            String error, String errorDescription, String state) throws IOException {
-        String errorUrl = buildErrorRedirectUrl(redirectUri, error, errorDescription, state);
-        response.sendRedirect(errorUrl);
-    }
-
-    private String buildErrorRedirectUrl(String redirectUri, String error,
-            String errorDescription, String state) {
-        StringBuilder url = new StringBuilder(redirectUri);
-        url.append(redirectUri.contains("?") ? "&" : "?");
-        url.append("error=").append(URLEncoder.encode(error, StandardCharsets.UTF_8));
-        url.append("&error_description=").append(URLEncoder.encode(errorDescription, StandardCharsets.UTF_8));
-
-        if (state != null && !state.isEmpty()) {
-            url.append("&state=").append(URLEncoder.encode(state, StandardCharsets.UTF_8));
-        }
-
-        return url.toString();
-    }
-
-    private String redirectError(HttpServletResponse response, String redirectUri,
-            String error, String errorDescription, String state) throws IOException {
-        if (redirectUri != null && !redirectUri.isEmpty()) {
-            redirectWithError(response, redirectUri, error, errorDescription, state);
-            return null;
-        } else {
-            return "redirect:/error?error=" + error + "&error_description=" + errorDescription;
-        }
     }
 
     private Map<String, Object> createErrorResponse(String error, String errorDescription) {

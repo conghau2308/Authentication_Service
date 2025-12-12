@@ -92,7 +92,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/face-auth/**").permitAll()
 
                                                 // ✅ OAuth2 custom endpoints
-                                                .requestMatchers("/oauth2/authorize").permitAll()
+                                                .requestMatchers("/oauth2/authorize/validate").permitAll()
+                                                .requestMatchers("oauth2/authenticate").permitAll()
                                                 .requestMatchers("/oauth2/token").permitAll()
                                                 .requestMatchers("/oauth2/face-auth/login").permitAll()
                                                 .requestMatchers("/oauth2/revoke").permitAll()
