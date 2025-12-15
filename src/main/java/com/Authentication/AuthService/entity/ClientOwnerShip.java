@@ -8,7 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "client_ownerships")
+@Table(name = "client_ownership")
 public class ClientOwnerShip {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -19,6 +19,8 @@ public class ClientOwnerShip {
 
     @Column(nullable = false, unique = true)
     private String clientId;
+
+    protected ClientOwnerShip() {}
 
     public ClientOwnerShip(Long developerId, String clientId) {
         this.developerId = developerId;

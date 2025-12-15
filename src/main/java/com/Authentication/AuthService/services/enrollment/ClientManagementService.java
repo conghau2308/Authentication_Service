@@ -9,14 +9,15 @@ import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.Authentication.AuthService.dto.CreateClientDto;
 import com.Authentication.AuthService.entity.ClientOwnerShip;
-import com.Authentication.AuthService.entity.Developer;
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.ClientOwnerShipRepository;
 
-import jakarta.transaction.Transactional;
 
 @Service
 public class ClientManagementService {
@@ -33,7 +34,7 @@ public class ClientManagementService {
     }
 
     @Transactional
-    public RegisteredClient createClient(CreateClientDto dto, Developer developer) {
+    public RegisteredClient createClient(CreateClientDto dto, User developer) {
         String clientId = UUID.randomUUID().toString();
         String rawSecret = UUID.randomUUID().toString();
         String encodedSecret = passwordEncoder.encode(rawSecret);
@@ -47,8 +48,9 @@ public class ClientManagementService {
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUris(uris -> uris.addAll(dto.getRedirectUris()))
                 .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.PROFILE) // Có thể thay đổi để chọn scope cần thiết
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .tokenSettings(TokenSettings.builder().build())
                 .build();
         
         this.clientRepository.save(registeredClient);
