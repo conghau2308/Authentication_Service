@@ -20,7 +20,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class JwtService {
+public class OAuthJwtService {
 
     private final RsaKeyService rsaKeyService;
     private final UserService userService; // ✅ Inject UserService

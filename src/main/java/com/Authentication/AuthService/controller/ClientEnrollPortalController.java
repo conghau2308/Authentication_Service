@@ -2,10 +2,7 @@ package com.Authentication.AuthService.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.web.bind.annotation.*;
 
 import com.Authentication.AuthService.dto.ClientSecretDto;
@@ -13,12 +10,10 @@ import com.Authentication.AuthService.dto.CreateClientDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.services.enrollment.ClientManagementService;
 
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -33,46 +28,19 @@ public class ClientEnrollPortalController {
 
     /**
      * ✅ Đăng ký OAuth2 Client mới
-     * Yêu cầu: User phải đã đăng nhập (face auth + session hợp lệ)
+     * Yêu cầu: User phải có JWT access token hợp lệ
+     * 
+     * @AuthenticationPrincipal User user - Tự động inject User entity từ JWT
      */
     @PostMapping
     public ResponseEntity<?> registerNewClient(
             @Valid @RequestBody CreateClientDto createClientDto,
-            @AuthenticationPrincipal User user,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal User user) {
 
         log.info("📝 Nhận yêu cầu đăng ký client mới");
 
-        // ✅ Debug logging
-        HttpSession session = request.getSession(false);
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-
-        // ✅ LOG CHI TIẾT
-        log.info("🔍 Request Headers:");
-        request.getHeaderNames().asIterator()
-                .forEachRemaining(header -> log.info("   {}: {}", header, request.getHeader(header)));
-
-        log.info("🔍 Cookies:");
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                log.info("   {}: {}", cookie.getName(), cookie.getValue());
-            }
-        } else {
-            log.warn("   ❌ Không có cookie nào được gửi!");
-        }
-
-        log.info("🔍 Session info:");
-        log.info("   - Session exists: {}", session != null);
-        if (session != null) {
-            log.info("   - Session ID: {}", session.getId());
-            log.info("   - Is new: {}", session.isNew());
-        }
-
-        log.info("🔍 Authentication: {}", auth);
-        log.info("🔍 User from @AuthenticationPrincipal: {}", user);
-
         if (user == null) {
-            log.error("❌ User is null - Session không hợp lệ hoặc cookie không được gửi");
+            log.error("❌ User is null - JWT token không hợp lệ hoặc đã hết hạn");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(createErrorResponse("unauthorized", "Vui lòng đăng nhập lại"));
         }
@@ -81,10 +49,10 @@ public class ClientEnrollPortalController {
             log.info("✅ User authenticated: {} (ID: {}, Email: {})",
                     user.getUsername(), user.getId(), user.getEmail());
 
-            // 2. Tạo client
+            // Tạo client
             RegisteredClient clientWithRawSecret = clientService.createClient(createClientDto, user);
 
-            // 3. Tạo response DTO
+            // Tạo response
             ClientSecretDto responseDto = new ClientSecretDto(
                     clientWithRawSecret.getClientId(),
                     clientWithRawSecret.getClientSecret());
@@ -92,7 +60,6 @@ public class ClientEnrollPortalController {
             log.info("✅ Client đã được tạo thành công - Client ID: {} cho User: {}",
                     clientWithRawSecret.getClientId(), user.getUsername());
 
-            // 4. Trả về response với thông tin bổ sung
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Client đã được tạo thành công");
@@ -159,7 +126,6 @@ public class ClientEnrollPortalController {
         return ResponseEntity.ok(response);
     }
 
-    // Helper method
     private Map<String, String> createErrorResponse(String error, String message) {
         Map<String, String> errorResponse = new HashMap<>();
         errorResponse.put("error", error);

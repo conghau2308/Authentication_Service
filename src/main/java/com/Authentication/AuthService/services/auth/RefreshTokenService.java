@@ -63,18 +63,18 @@ public class RefreshTokenService {
                 .findValidToken(refreshToken, clientId)
                 .orElseThrow(() -> {
                     log.error("Refresh token không hợp lệ hoặc đã hết hạn hoặc không khớp client_id");
-                    return new IllegalArgumentException("invalid_grant");
+                    return new IllegalArgumentException("invalid_refresh_token");
                 });
 
         if (token.isRevoked()) {
             log.error("Refresh token đã bị revoke");
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("refresh_token_is_revoked");
         }
 
         if (token.getExpiresAt().isBefore(Instant.now())) {
             log.error("Refresh token đã hết hạn - expiresAt: {}, now: {}",
                     token.getExpiresAt(), Instant.now());
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("refresh_token_expired");
         }
 
         log.info("Refresh token hợp lệ cho user: {}", token.getUsername());

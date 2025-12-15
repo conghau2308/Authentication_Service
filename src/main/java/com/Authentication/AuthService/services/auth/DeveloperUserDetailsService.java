@@ -1,8 +1,6 @@
 package com.Authentication.AuthService.services.auth;
 
-import com.Authentication.AuthService.entity.Developer; // <-- Import entity của bạn
 import com.Authentication.AuthService.entity.User;
-import com.Authentication.AuthService.repository.DeveloperRepository; // <-- Import repo của bạn
 import com.Authentication.AuthService.repository.UserRepository;
 
 import org.springframework.security.core.userdetails.UserDetails;

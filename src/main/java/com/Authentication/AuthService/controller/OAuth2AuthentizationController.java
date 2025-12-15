@@ -18,7 +18,7 @@ import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
-import com.Authentication.AuthService.services.auth.JwtService;
+import com.Authentication.AuthService.services.auth.OAuthJwtService;
 import com.Authentication.AuthService.services.auth.TokenService;
 import com.Authentication.AuthService.services.user.UserService;
 
@@ -39,7 +39,7 @@ public class OAuth2AuthentizationController {
     private final FaceAuthService faceAuthService;
     private final UserRepository userRepository;
     private final TokenService tokenService;
-    private final JwtService jwtService;
+    private final OAuthJwtService jwtService;
     private final UserService userService;
 
     /**
@@ -150,80 +150,111 @@ public class OAuth2AuthentizationController {
     public ResponseEntity<Map<String, Object>> authenticate(
             @RequestBody AuthenticateRequestDto request) {
 
-        log.info("Authentication request - username: {}, client_id: {}",
+        log.info("🔐 Authentication request - username: {}, client_id: {}",
                 request.getUsername(), request.getClientId());
 
         try {
             // 1. Re-validate client và redirect_uri (security best practice)
             RegisteredClient client = registeredClientRepository.findByClientId(request.getClientId());
             if (client == null) {
-                log.error("Invalid client_id: {}", request.getClientId());
+                log.error("❌ Invalid client_id: {}", request.getClientId());
                 return ResponseEntity
-                        .badRequest()
+                        .status(HttpStatus.BAD_REQUEST)
                         .body(createAuthError("invalid_client",
-                                "Invalid client", null, null));
+                                "Client ID không hợp lệ", null, null));
             }
 
             if (!client.getRedirectUris().contains(request.getRedirectUri())) {
-                log.error("Invalid redirect_uri: {}", request.getRedirectUri());
+                log.error("❌ Invalid redirect_uri: {}. Registered: {}",
+                        request.getRedirectUri(), client.getRedirectUris());
                 return ResponseEntity
-                        .badRequest()
+                        .status(HttpStatus.BAD_REQUEST)
                         .body(createAuthError("invalid_request",
-                                "Invalid redirect URI", null, null));
+                                "Redirect URI không được đăng ký cho client này", null, null));
             }
 
-            // 3. Gọi Server A để verify face
-            log.info("Đang gọi Server A để xác thực khuôn mặt cho user: {}",
-                    request.getUsername());
-
-            Optional<User> faceDataOpt = userRepository.findByUsername(request.getUsername());
-
-            if (!faceDataOpt.isPresent()) {
-                log.error("Không tìm thấy dữ liệu khuôn mặt cho user: {}",
-                        request.getUsername());
+            // 2. Validate username
+            if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+                log.error("❌ Username is required");
                 return ResponseEntity
-                        .badRequest()
-                        .body(createAuthError("access_denied",
-                                "User has not enrolled their face", null, null));
-            }
-
-            User faceData = faceDataOpt.get();
-
-            // Gọi đúng method verifyUser với đầy đủ tham số
-            boolean authenticated = faceAuthService.verifyUser(
-                    request.getUsername(),
-                    request.getImage_b64(),
-                    faceData.getHelperData(), // helper_data_b64
-                    faceData.getKeyHash() // key_hash_b64
-            );
-
-            if (!authenticated) {
-                log.warn("Face authentication failed for user: {}", request.getUsername());
-                // Trả về error nhưng KHÔNG redirect ngay - cho phép user retry
-                return ResponseEntity
-                        .status(HttpStatus.UNAUTHORIZED)
-                        .body(createAuthError("access_denied",
-                                "Face authentication failed. Please try again.",
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createAuthError("invalid_request",
+                                "Username không được để trống",
                                 request.getRedirectUri(),
                                 request.getState()));
             }
 
-            log.info("Face authentication successful for user: {}", request.getUsername());
+            // 3. Validate image
+            if (request.getImage_b64() == null || request.getImage_b64().isEmpty()) {
+                log.error("❌ Face image is required");
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(createAuthError("invalid_request",
+                                "Vui lòng gửi ảnh khuôn mặt",
+                                request.getRedirectUri(),
+                                request.getState()));
+            }
 
-            // 3. Generate authorization code
+            // 4. Kiểm tra user có tồn tại và đã đăng ký khuôn mặt chưa
+            Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
+            if (userOpt.isEmpty()) {
+                log.warn("⚠️ User not found: {}", request.getUsername());
+                return ResponseEntity
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body(createAuthError("access_denied",
+                                "User chưa đăng ký khuôn mặt",
+                                request.getRedirectUri(),
+                                request.getState()));
+            }
+
+            User user = userOpt.get();
+
+            // Kiểm tra user đã có dữ liệu face chưa
+            if (user.getHelperData() == null || user.getKeyHash() == null) {
+                log.warn("⚠️ User {} has not enrolled face data", request.getUsername());
+                return ResponseEntity
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body(createAuthError("access_denied",
+                                "User chưa đăng ký dữ liệu khuôn mặt",
+                                request.getRedirectUri(),
+                                request.getState()));
+            }
+
+            // 5. Gọi FaceAuthService để verify khuôn mặt
+            log.info("🔍 Đang xác thực khuôn mặt cho user: {}", request.getUsername());
+
+            boolean authenticated = faceAuthService.verifyUser(
+                    request.getUsername(),
+                    request.getImage_b64(),
+                    user.getHelperData(),
+                    user.getKeyHash());
+
+            if (!authenticated) {
+                log.warn("❌ Face authentication failed for user: {}", request.getUsername());
+                return ResponseEntity
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body(createAuthError("access_denied",
+                                "Khuôn mặt không khớp. Vui lòng thử lại.",
+                                request.getRedirectUri(),
+                                request.getState()));
+            }
+
+            log.info("✅ Face authentication successful for user: {}", request.getUsername());
+
+            // 6. Generate authorization code
             String authCode = authorizationCodeService.generateAuthorizationCode(
                     request.getClientId(),
                     request.getUsername(),
                     request.getRedirectUri(),
                     request.getScope(),
                     request.getState(),
-                    request.getNonce(), // nonce for OIDC
+                    request.getNonce(),
                     request.getCodeChallenge(),
                     request.getCodeChallengeMethod());
 
-            log.info("Generated authorization code for user: {}", request.getUsername());
+            log.info("🎫 Generated authorization code for user: {}", request.getUsername());
 
-            // 4. Trả về redirect URL
+            // 7. Trả về redirect URL
             String redirectUrl = buildSuccessRedirectUrl(
                     request.getRedirectUri(),
                     authCode,
@@ -231,16 +262,36 @@ public class OAuth2AuthentizationController {
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
+            response.put("message", "Xác thực thành công");
             response.put("redirect_url", redirectUrl);
 
             return ResponseEntity.ok(response);
 
+        } catch (FaceAuthService.PythonApiException e) {
+            log.error("❌ Python API verify error: {} (code: {})", e.getMessage(), e.getErrorCode());
+            HttpStatus httpStatus = mapPythonStatusCode(e.getStatusCode());
+
+            return ResponseEntity.status(httpStatus).body(createAuthError(
+                    "face_verification_error",
+                    e.getMessage(),
+                    request.getRedirectUri(),
+                    request.getState()));
+
+        } catch (IllegalArgumentException e) {
+            log.error("❌ Invalid argument: {}", e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(createAuthError("invalid_request",
+                            e.getMessage(),
+                            request.getRedirectUri(),
+                            request.getState()));
+
         } catch (Exception e) {
-            log.error("Authentication error: ", e);
+            log.error("❌ Lỗi không xác định khi xác thực: {}", e.getMessage(), e);
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(createAuthError("server_error",
-                            "Internal server error during authentication",
+                            "Lỗi hệ thống: " + e.getMessage(),
                             request.getRedirectUri(),
                             request.getState()));
         }
@@ -257,6 +308,7 @@ public class OAuth2AuthentizationController {
             @RequestParam(value = "code", required = false) String code,
             @RequestParam(value = "code_verifier", required = false) String codeVerifier,
             @RequestParam(value = "refresh_token", required = false) String refreshToken,
+            @RequestParam(value = "state", required = false) String state,
             @RequestParam(value = "redirect_uri", required = false) String redirectUri) {
 
         log.info("Nhận yêu cầu token - grant_type: {}, client_id: {}", grantType, clientId);
@@ -298,7 +350,7 @@ public class OAuth2AuthentizationController {
 
                 log.info("Xử lý authorization_code flow - code: {}", code);
                 Object tokenResponse = tokenService.exchangeCodeForTokens(
-                        grantType, clientId, clientSecret, code, redirectUri, codeVerifier);
+                        grantType, clientId, clientSecret, code, redirectUri, state, codeVerifier);
 
                 log.info("Token được tạo thành công cho client: {}", clientId);
                 return ResponseEntity.ok(tokenResponse);
@@ -315,7 +367,7 @@ public class OAuth2AuthentizationController {
 
                 log.info("Xử lý refresh_token flow");
                 Object tokenResponse = tokenService.exchangeCodeForTokens(
-                        grantType, clientId, clientSecret, refreshToken, redirectUri, null);
+                        grantType, clientId, clientSecret, refreshToken, redirectUri, null, null);
 
                 log.info("Token được tạo thành công từ refresh_token cho client: {}", clientId);
                 return ResponseEntity.ok(tokenResponse);
@@ -551,11 +603,36 @@ public class OAuth2AuthentizationController {
         return switch (error) {
             case "unsupported_grant_type" ->
                 "Grant type không được hỗ trợ. Chỉ hỗ trợ authorization_code hoặc refresh_token";
-            case "invalid_client" -> "Client ID hoặc Client Secret không hợp lệ";
+            case "invalid_client_id" -> "Client ID không hợp lệ";
+            case "invalid_client_secret" -> "Client Secret không hợp lệ";
             case "invalid_grant" ->
                 "Authorization code hoặc refresh token không hợp lệ, đã hết hạn hoặc đã được sử dụng";
+            case "code_not_found" -> "Authorization code không tồn tại";
+            case "code_already_used" -> "Authorization code đã được sử dụng";
+            case "code_expired" -> "Authorization code đã hết hạn";
+            case "client_id_mismatch" -> "Client ID không khớp với code";
+            case "redirect_uri_mismatch" -> "Redirect URI không khớp";
+            case "state_mismatch" -> "State không khớp";
             case "invalid_request" -> "Request không hợp lệ, thiếu parameter bắt buộc";
+            case "invalid_refresh_token" -> "Refresh token không hợp lệ hoặc đã hết hạn hoặc không khớp client_id";
+            case "refresh_token_is_revoked" -> "Refresh token đã bị revoke";
+            case "refresh_token_expired" -> "Refresh token đã hết hạn";
+            case "no_code_verifier_found"-> "Thiếu code_verifier cho authorization code yêu cầu PKCE";
+            case "unsupported_method" -> "Chỉ hỗ trợ challenge method S256";
+            case "invalid_code_verifier" -> "code_verifier không khớp với code_challenge đã lưu";
             default -> "Lỗi không xác định";
+        };
+    }
+
+    /**
+     * Helper method để map Python status code
+     */
+    private HttpStatus mapPythonStatusCode(int statusCode) {
+        return switch (statusCode) {
+            case 400 -> HttpStatus.BAD_REQUEST;
+            case 404 -> HttpStatus.NOT_FOUND;
+            case 500 -> HttpStatus.INTERNAL_SERVER_ERROR;
+            default -> HttpStatus.BAD_REQUEST;
         };
     }
 }

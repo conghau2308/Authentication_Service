@@ -3,6 +3,7 @@ package com.Authentication.AuthService.services.auth;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.Base64;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,7 +30,7 @@ public class TokenService {
     private final RegisteredClientRepository registeredClientRepository;
     private final OAuth2CodeRepository authorizationCodeRepository;
     private final RefreshTokenService refreshTokenService;
-    private final JwtService jwtService;
+    private final OAuthJwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -41,6 +42,7 @@ public class TokenService {
             String clientSecret,
             String code,
             String redirectUri,
+            String state,
             String codeVerifier) throws IllegalArgumentException {
 
         // Validate grant_type
@@ -53,19 +55,21 @@ public class TokenService {
         RegisteredClient registeredClient = registeredClientRepository.findByClientId(clientId);
         if (registeredClient == null) {
             log.error("❌ Client không tồn tại: {}", clientId);
-            throw new IllegalArgumentException("invalid_client");
+            throw new IllegalArgumentException("invalid_client_id");
         }
 
         // Validate client_secret (so sánh với hash)
         String storedClientSecret = registeredClient.getClientSecret();
         if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
             log.error("❌ Client secret không hợp lệ cho client: {}", clientId);
-            throw new IllegalArgumentException("invalid_client");
+            throw new IllegalArgumentException("invalid_client_secret");
         }
+
+        // Nếu bắt buộc PKCE thì nhớ validate thêm code_verifier
 
         // Xử lý authorization_code
         if ("authorization_code".equals(grantType)) {
-            return handleAuthorizationCodeFlow(registeredClient, code, redirectUri, codeVerifier);
+            return handleAuthorizationCodeFlow(registeredClient, code, redirectUri, state, codeVerifier);
         }
 
         // Xử lý refresh_token
@@ -84,6 +88,7 @@ public class TokenService {
             RegisteredClient registeredClient,
             String code,
             String redirectUri,
+            String state,
             String codeVerifier) throws IllegalArgumentException {
 
         log.info("Xử lý Authorization Code Flow cho client: {}", registeredClient.getClientId());
@@ -92,28 +97,33 @@ public class TokenService {
         OAuth2Code authCode = authorizationCodeRepository.findByCode(code)
                 .orElseThrow(() -> {
                     log.error("Authorization code không tồn tại: {}", code);
-                    return new IllegalArgumentException("invalid_grant");
+                    return new IllegalArgumentException("code_not_found");
                 });
 
         if (authCode.isUsed()) {
             log.error("Authorization code đã được sử dụng: {}", code);
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("code_already_used");
         }
 
         // nếu cần thì thêm thuộc tính isExpired
-        // if (authCode.isExpired()) {
-        //     log.error("Authorization code đã hết hạn: {}", code);
-        //     throw new IllegalArgumentException("invalid_grant");
-        // }
+        if (authCode.getExpiresAt().isBefore(Instant.now())) {
+            log.error("Authorization code đã hết hạn: {}", code);
+            throw new IllegalArgumentException("code_expired");
+        }
 
         if (!authCode.getClientId().equals(registeredClient.getClientId())) {
             log.error("Client ID không khớp với code");
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("client_id_mismatch");
         }
 
         if (redirectUri != null && !authCode.getRedirectUri().equals(redirectUri)) {
             log.error("Redirect URI không khớp");
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("redirect_uri_mismatch");
+        }
+
+        if (state != null && !authCode.getState().equals(state)) {
+            log.error("State không khớp");
+            throw new IllegalArgumentException("state_mismatch");
         }
 
         validatePkceIfPresent(authCode, codeVerifier);
@@ -192,19 +202,19 @@ public class TokenService {
 
         if (!StringUtils.hasText(codeVerifier)) {
             log.error("Thiếu code_verifier cho authorization code yêu cầu PKCE");
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("no_code_verifier_found");
         }
 
         String method = authCode.getCodeChallengeMethod();
         String expectedChallenge = switch (method == null ? "plain" : method.toUpperCase()) {
             case "S256" -> generateS256Challenge(codeVerifier);
             case "PLAIN" -> codeVerifier;
-            default -> throw new IllegalArgumentException("invalid_grant");
+            default -> throw new IllegalArgumentException("unsupported_method");
         };
 
         if (!authCode.getCodeChallenge().equals(expectedChallenge)) {
             log.error("code_verifier không khớp với code_challenge đã lưu");
-            throw new IllegalArgumentException("invalid_grant");
+            throw new IllegalArgumentException("invalid_code_verifier");
         }
     }
 
