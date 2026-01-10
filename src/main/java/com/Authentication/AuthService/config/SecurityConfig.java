@@ -15,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -23,9 +24,12 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import jakarta.servlet.DispatcherType;
+import lombok.RequiredArgsConstructor;
 
 @Configuration
+@RequiredArgsConstructor
 public class SecurityConfig {
+        private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
         @Bean
         public PasswordEncoder passwordEncoder() {
@@ -35,10 +39,11 @@ public class SecurityConfig {
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
-                configuration.setAllowedOrigins(List.of("http://localhost:3001", "http://localhost:3000"));
+                configuration.setAllowedOrigins(List.of("http://localhost:3001", "http://localhost:3000",
+                                "https://auth-developer-portal.vercel.app"));
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(Arrays.asList(
-                                "Authorization", "Content-Type", "Accept", "X-Requested-With"));
+                                "Authorization", "Content-Type", "Accept", "X-Requested-With", "ngrok-skip-browser-warning"));
                 configuration.setAllowCredentials(true);
 
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -55,7 +60,7 @@ public class SecurityConfig {
                                 new AntPathRequestMatcher("/.well-known/oauth-authorization-server"),
                                 new AntPathRequestMatcher("/.well-known/openid-configuration"),
                                 new AntPathRequestMatcher("/oauth2/introspect"),
-                                new AntPathRequestMatcher("/oauth2/revoke"),
+                                // new AntPathRequestMatcher("/oauth2/revoke"),
                                 new AntPathRequestMatcher("/.well-known/jwks.json"),
                                 new AntPathRequestMatcher("/userinfo"));
 
@@ -105,7 +110,7 @@ public class SecurityConfig {
                                                 // ✅ Portal endpoints
                                                 .requestMatchers("/portal/demo-login").permitAll()
                                                 .requestMatchers("/portal/login", "/portal/register").permitAll()
-                                                .requestMatchers("/portal/api/**").permitAll()
+                                                .requestMatchers("/portal/api/v1/enroll/**").authenticated()
 
                                                 // ✅ Demo endpoints
                                                 .requestMatchers("/demo/**").permitAll()
@@ -120,10 +125,10 @@ public class SecurityConfig {
                                                 .anyRequest().authenticated())
                                 // ✅ QUAN TRỌNG NHẤT
                                 .sessionManagement(session -> session
-                                                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                                 // ✅ QUAN TRỌNG NHẤT
-                                .securityContext(securityContext -> securityContext.requireExplicitSave(false))
+                                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
                                 .logout(logout -> logout
                                                 .logoutUrl("/logout")

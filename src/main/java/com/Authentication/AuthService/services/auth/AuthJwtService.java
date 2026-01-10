@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -22,7 +23,7 @@ public class AuthJwtService {
     @Value("${jwt.secret:your-super-secret-key-must-be-at-least-256-bits-long-change-this-in-production-environment}")
     private String secretKey;
 
-    @Value("${jwt.access-token-expiration:900000}") // 15 minutes
+    @Value("${jwt.access-token-expiration-auth:900000}") // 15 minutes
     private long accessTokenExpiration;
 
     @Value("${jwt.refresh-token-expiration:86400000}") // 24 Hours
@@ -47,6 +48,7 @@ public class AuthJwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("username", username);
         claims.put("type", "refresh");
+        claims.put("jti", UUID.randomUUID().toString());
 
         return createToken(claims, username, refreshTokenExpiration);
     }
