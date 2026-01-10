@@ -466,7 +466,7 @@ public class FaceAuthController {
                 cookie.setSecure(true); // Chỉ gửi qua HTTPS (production)
                 cookie.setPath("/");
                 cookie.setMaxAge(maxAge);
-                cookie.setAttribute("SameSite", "Strict"); // CSRF protection
+                cookie.setAttribute("SameSite", "None"); // CSRF protection + bật strict nếu đã có frontend + backend cùng domain
                 response.addCookie(cookie);
         }
 }

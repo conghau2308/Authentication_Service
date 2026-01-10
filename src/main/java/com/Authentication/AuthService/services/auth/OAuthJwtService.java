@@ -73,15 +73,15 @@ public class OAuthJwtService {
     }
 
     /**
-     * ✅ Generate ID Token với RS256
+     * Generate ID Token với RS256
      * sub = username, user_id = stable ID
      */
     public String generateIdToken(String username, String clientId, String nonce) {
-        // ✅ Query user từ database
+        // Query user từ database
         User user = userService.findByUsername(username);
 
         var builder = Jwts.builder()
-                .setSubject(username) // ✅ sub = username
+                .setSubject(username) // sub = username
                 .setAudience(clientId)
                 .setIssuer(issuer)
                 .setIssuedAt(new Date())

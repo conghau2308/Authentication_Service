@@ -59,11 +59,11 @@ public class TokenService {
         }
 
         // Validate client_secret (so sánh với hash)
-        String storedClientSecret = registeredClient.getClientSecret();
-        if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
-            log.error("❌ Client secret không hợp lệ cho client: {}", clientId);
-            throw new IllegalArgumentException("invalid_client_secret");
-        }
+        // String storedClientSecret = registeredClient.getClientSecret();
+        // if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
+        //     log.error("❌ Client secret không hợp lệ cho client: {}", clientId);
+        //     throw new IllegalArgumentException("invalid_client_secret");
+        // }
 
         // Nếu bắt buộc PKCE thì nhớ validate thêm code_verifier
 
@@ -103,6 +103,11 @@ public class TokenService {
         if (authCode.isUsed()) {
             log.error("Authorization code đã được sử dụng: {}", code);
             throw new IllegalArgumentException("code_already_used");
+        }
+
+        if (authCode.isUsed() && authorizationCodeRepository.existsByNonce(authCode.getNonce())) {
+            log.error("Nonce đã được sử dụng.");
+            throw new IllegalArgumentException("nonce_used");
         }
 
         // nếu cần thì thêm thuộc tính isExpired
