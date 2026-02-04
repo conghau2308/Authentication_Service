@@ -39,7 +39,7 @@ public class SecurityConfig {
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
-                configuration.setAllowedOrigins(List.of("http://localhost:3001", "http://localhost:3000",
+                configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:3001",
                                 "https://auth-developer-portal.vercel.app"));
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(Arrays.asList(
@@ -94,13 +94,14 @@ public class SecurityConfig {
                                                 // ✅ JWKS endpoints - public access
                                                 .requestMatchers("/.well-known/**").permitAll()
 
-                                                .requestMatchers("/face-auth/**").permitAll()
+                                                .requestMatchers("/auth/**").permitAll()
+                                                .requestMatchers("/oauth2/**").permitAll()
 
                                                 // ✅ OAuth2 custom endpoints
-                                                .requestMatchers("/oauth2/authorize/validate").permitAll()
-                                                .requestMatchers("oauth2/authenticate").permitAll()
+                                                .requestMatchers("/oauth2/validate").permitAll()
+                                                .requestMatchers("oauth2/authorize").permitAll()
                                                 .requestMatchers("/oauth2/token").permitAll()
-                                                .requestMatchers("/oauth2/face-auth/login").permitAll()
+                                                .requestMatchers("/oauth2/auth/login").permitAll()
                                                 .requestMatchers("/oauth2/revoke").permitAll()
                                                 .requestMatchers("/oauth2/userinfo").permitAll()
 

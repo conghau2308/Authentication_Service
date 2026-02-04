@@ -12,7 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class EnrollRequestDto {
+public class UserEnrollRequestDto {
 
     @NotBlank(message = "Username không được để trống")
     private String username;

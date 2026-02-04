@@ -20,7 +20,7 @@ public class RefreshTokenResponseDto {
     private String tokenType = "Bearer";
 
     @JsonProperty("expires_in")
-    private Long expiresIn;
+    private int expiresIn;
 
     @JsonProperty("refresh_token")
     private String refreshToken;

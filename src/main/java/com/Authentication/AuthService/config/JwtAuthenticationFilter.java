@@ -30,7 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AuthJwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
 
-    private static final String ACCESS_TOKEN_COOKIE = "access_token";
+    private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
 
     @Override
     protected void doFilterInternal(
@@ -54,7 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 final String username = jwtService.extractUsername(jwt);
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    if (jwtService.validateToken(jwt, username)) {
+                    if (jwtService.validateAccessToken(jwt, username)) {
 
                         // ✅ Load User entity thay vì chỉ username
                         User user = userDetailsService.loadUserEntityByUsername(username);

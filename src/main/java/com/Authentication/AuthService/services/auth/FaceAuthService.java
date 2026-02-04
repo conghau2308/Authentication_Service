@@ -1,6 +1,6 @@
 package com.Authentication.AuthService.services.auth;
 
-import com.Authentication.AuthService.dto.EnrollResponseDto;
+import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.EnrollRequestWiFaKeyDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,13 +74,13 @@ public class FaceAuthService {
     /**
      * Enroll user với xử lý lỗi chi tiết
      */
-    public EnrollResponseDto enrollUser(String username, String imageBase64) {
+    public UserEnrollResponseDto enrollUser(String username, String imageBase64) {
         log.info("🔵 Đang gọi Python API enroll cho user: {}", username);
 
         EnrollRequestWiFaKeyDto enrollRequestWiFaKeyDto = new EnrollRequestWiFaKeyDto(imageBase64);
 
         try {
-            EnrollResponseDto response = webClient.post()
+            UserEnrollResponseDto response = webClient.post()
                     .uri("/enroll/{username}", username)
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(enrollRequestWiFaKeyDto)
@@ -96,7 +96,7 @@ public class FaceAuthService {
                                         PythonApiException exception = parsePythonError(errorBody, statusCode);
                                         return Mono.error(exception);
                                     }))
-                    .bodyToMono(EnrollResponseDto.class)
+                    .bodyToMono(UserEnrollResponseDto.class)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .doOnSuccess(resp -> {
                         if (resp != null) {

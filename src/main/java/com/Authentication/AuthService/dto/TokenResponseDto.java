@@ -20,7 +20,7 @@ public class TokenResponseDto {
     private String tokenType;
     
     @JsonProperty("expires_in")
-    private Long expiresIn;
+    private int expiresIn;
     
     @JsonProperty("scope")
     private String scope;

@@ -8,11 +8,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Builder;
 import lombok.Data;
 
 @Entity
 @Table(name = "oauth2_authorization_codes")
 @Data
+@Builder
 public class OAuth2Code {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

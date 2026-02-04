@@ -18,20 +18,15 @@ import com.Authentication.AuthService.entity.ClientOwnerShip;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.repository.ClientOwnerShipRepository;
 
+import lombok.RequiredArgsConstructor;
+
 
 @Service
+@RequiredArgsConstructor
 public class ClientManagementService {
     private final RegisteredClientRepository clientRepository;
     private final ClientOwnerShipRepository ownerShipRepository;
     private final PasswordEncoder passwordEncoder;
-
-    public ClientManagementService(RegisteredClientRepository clientRepository,
-                                    ClientOwnerShipRepository ownerShipRepository,
-                                    PasswordEncoder passwordEncoder) {
-        this.clientRepository = clientRepository;
-        this.ownerShipRepository = ownerShipRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
 
     @Transactional
     public RegisteredClient createClient(CreateClientDto dto, User developer) {
