@@ -45,5 +45,6 @@ public class OAuth2Code {
     private Instant expiresAt;
 
     // Đánh dấu code đã được dùng hay chưa (để chống tấn công replay)
+    @Builder.Default
     private boolean used = false;
 }

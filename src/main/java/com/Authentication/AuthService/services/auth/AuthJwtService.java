@@ -143,7 +143,7 @@ public class AuthJwtService {
         return parseToken(token).getSubject();
     }
 
-    public Date extractExperation(String token) {
+    public Date extractExpiration(String token) {
         return parseToken(token).getExpiration();
     }
 }
