@@ -35,8 +35,8 @@ public class OAuth2Client {
     @Column(name = "client_type", nullable = false, length = 50)
     private ClientType clientType;
 
-    @Column(name = "redirect_uris", columnDefinition = "TEXT")
-    private String redirectUris;
+    @Column(name = "redirect_uri", columnDefinition = "TEXT")
+    private String redirectUri;
 
     @Column(name = "scopes", columnDefinition = "TEXT")
     private String scopes;
@@ -53,5 +53,5 @@ public class OAuth2Client {
     private LocalDateTime createdAt;
 
     @Column(name = "created_by", nullable = false)
-    private String createdBy; // User ID của người tạo client
+    private String createdBy; // User name của người tạo client
 }

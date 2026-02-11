@@ -6,29 +6,23 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import com.Authentication.AuthService.dto.CreateClientDto;
 import com.Authentication.AuthService.dto.Client.ClientCredentialsResponseDto;
+import com.Authentication.AuthService.dto.Client.ClientEnrollRequestDto;
+import com.Authentication.AuthService.dto.Client.ClientEnrollResponseDto;
 import com.Authentication.AuthService.dto.Client.ClientIdDto;
 import com.Authentication.AuthService.dto.Client.ClientSecretDto;
 import com.Authentication.AuthService.dto.Client.ClientSecretResponseDto;
-import com.Authentication.AuthService.entity.ClientOwnerShip;
 import com.Authentication.AuthService.entity.OAuth2Client;
 import com.Authentication.AuthService.entity.OAuth2ClientMember;
 import com.Authentication.AuthService.entity.OAuth2ClientSecret;
-import com.Authentication.AuthService.entity.User;
+import com.Authentication.AuthService.enums.ClientType;
 import com.Authentication.AuthService.exception.business.BusinessException;
-import com.Authentication.AuthService.repository.ClientOwnerShipRepository;
 import com.Authentication.AuthService.repository.OAuth2ClientSecretRepository;
-import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
 import com.Authentication.AuthService.repository.OAuth2ClientMemberRepository;
 import com.Authentication.AuthService.repository.OAuth2ClientRepository;
@@ -38,42 +32,44 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ClientManagementService {
-    private final RegisteredClientRepository clientRepository;
-    private final ClientOwnerShipRepository ownerShipRepository;
     private final PasswordEncoder passwordEncoder;
     private final OAuth2ClientSecretRepository clientSecretRepository;
-    private final UserRepository userRepository;
     private final OAuth2ClientMemberRepository oAuth2ClientMemberRepository;
     private final OAuth2ClientRepository oAuth2ClientRepository;
     private final AuthJwtService authJwtService;
 
     @Transactional
-    public RegisteredClient createClient(CreateClientDto dto, User developer) {
-        String clientId = UUID.randomUUID().toString();
-        String rawSecret = UUID.randomUUID().toString();
-        String encodedSecret = passwordEncoder.encode(rawSecret);
+    public ClientEnrollResponseDto createClient(ClientEnrollRequestDto request, String accessToken) {
+        if (!StringUtils.hasText(request.getClientName())) {
+            throw new BusinessException("INVALID_REQUEST", "Client name không được để trống.");
+        }
+        if (!StringUtils.hasText(request.getRedirectUri())) {
+            throw new BusinessException("INVALID_REQUEST", "Redirect URI không được để trống.");
+        }
 
-        RegisteredClient registeredClient = RegisteredClient.withId(UUID.randomUUID().toString())
+        String username = authJwtService.extractUsername(accessToken);
+        String clientId = UUID.randomUUID().toString() + ".wifakey";
+        String scopes = String.join("+", OidcScopes.OPENID, OidcScopes.PROFILE, OidcScopes.EMAIL);
+        String grantTypes = String.join("+",
+                AuthorizationGrantType.AUTHORIZATION_CODE.getValue(),
+                AuthorizationGrantType.REFRESH_TOKEN.getValue());
+        OAuth2Client client = OAuth2Client.builder()
                 .clientId(clientId)
-                .clientSecret(encodedSecret)
-                .clientName(dto.getAppName())
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUris(uris -> uris.addAll(dto.getRedirectUris()))
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE) // Có thể thay đổi để chọn scope cần thiết
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
-                .tokenSettings(TokenSettings.builder().build())
+                .clientName(request.getClientName())
+                .redirectUri(request.getRedirectUri())
+                .clientType(ClientType.CONFIDENTIAL)
+                .scopes(scopes)
+                .grantTypes(grantTypes)
+                .createdBy(username)
                 .build();
+        oAuth2ClientRepository.save(client);
 
-        this.clientRepository.save(registeredClient);
-
-        ClientOwnerShip ownerShip = new ClientOwnerShip(developer.getId(), clientId);
-        this.ownerShipRepository.save(ownerShip);
-
-        return RegisteredClient.from(registeredClient)
-                .clientSecret(rawSecret)
+        return ClientEnrollResponseDto.builder()
+                .clientId(client.getClientId())
+                .clientName(client.getClientName())
+                .redirectUri(client.getRedirectUri())
+                .createdAt(client.getCreatedAt())
+                .ownerUsername(username)
                 .build();
     }
 
@@ -147,7 +143,8 @@ public class ClientManagementService {
         ;
     }
 
-    // Revoke này nên mở rộng để có tính năng revoke tất cả token được exchange từ secret này
+    // Revoke này nên mở rộng để có tính năng revoke tất cả token được exchange từ
+    // secret này
     @Transactional
     public void revokeClientSecret(String accessToken, String clientId, String secretId) {
         String username = authJwtService.extractUsername(accessToken);
@@ -157,7 +154,7 @@ public class ClientManagementService {
                 .orElseThrow(() -> new BusinessException("NOT_FOUND_CLIENT_SECRET", "Không tìm thấy Client Secret.",
                         HttpStatus.NOT_FOUND));
 
-        if(!clientSecret.isValid()) {
+        if (!clientSecret.isValid()) {
             throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret đã bị thu hồi trước đó.",
                     HttpStatus.BAD_REQUEST);
         }
