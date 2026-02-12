@@ -6,7 +6,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
 
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -14,6 +13,7 @@ import org.springframework.util.StringUtils;
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
+import com.Authentication.AuthService.entity.OAuth2Client;
 import com.Authentication.AuthService.entity.OAuth2Code;
 import com.Authentication.AuthService.entity.OAuth2RefreshToken;
 import com.Authentication.AuthService.exception.business.BusinessException;
@@ -35,7 +35,7 @@ public class TokenService {
 
     @Transactional
     public TokenResponseDto handleAuthorizationCodeFlow(
-            RegisteredClient client,
+            String clientId,
             String code,
             String redirectUri,
             String state,
@@ -56,11 +56,11 @@ public class TokenService {
             throw new BusinessException("CODE_EXPIRED", "Authorization code đã hết hạn");
         }
 
-        if (!authCode.getClientId().equals(client.getClientId())) {
+        if (!authCode.getClientId().equals(clientId)) {
             throw new BusinessException("CLIENT_ID_MISMATCH", "Authorization Code không khớp với Client ID.");
         }
 
-        if (!authCode.getRedirectUri().equals(client.getClientId())) {
+        if (!authCode.getRedirectUri().equals(redirectUri)) {
             throw new BusinessException("REDIRECT_URI_MISMATCH",
                     "Authorization Code không khớp với Redirect uri của Client.");
         }
@@ -76,10 +76,10 @@ public class TokenService {
         oAuth2CodeRepository.save(authCode);
 
         String accessToken = oAuthJwtService.generateAccessToken(authCode.getUsername(),
-                client.getClientId(), authCode.getScope());
+                clientId, authCode.getScope());
         String idToken = oAuthJwtService.generateIdToken(authCode.getUsername(),
-                client.getClientId(), authCode.getNonce());
-        String refreshToken = oAuthJwtService.generateRefreshToken(authCode.getUsername(), client.getClientId());
+                clientId, authCode.getNonce());
+        String refreshToken = oAuthJwtService.generateRefreshToken(authCode.getUsername(), clientId);
 
         return TokenResponseDto.builder()
                 .accessToken(accessToken)
@@ -91,7 +91,7 @@ public class TokenService {
     }
 
     @Transactional
-    public RefreshTokenResponseDto handleRefreshTokenFlow(RegisteredClient client, String refreshToken) {
+    public RefreshTokenResponseDto handleRefreshTokenFlow(OAuth2Client client, String refreshToken) {
         OAuth2RefreshToken token = refreshTokenService.validateRefreshToken(refreshToken, client.getClientId());
 
         String newAccessToken = oAuthJwtService.generateAccessToken(token.getUsername(), client.getClientId(),

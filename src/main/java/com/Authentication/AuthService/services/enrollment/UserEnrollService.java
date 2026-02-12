@@ -10,6 +10,7 @@ import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
 import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
+import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.entity.AuthRefreshToken;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
@@ -20,6 +21,7 @@ import com.Authentication.AuthService.services.auth.FaceAuthService;
 import com.Authentication.AuthService.services.cookies.CookiesService;
 
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -32,6 +34,7 @@ public class UserEnrollService {
     private final CookiesService cookiesService;
     private final CookieConfig cookieConfig;
 
+    @Transactional
     public void enroll(UserEnrollRequestDto request) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException("USERNAME_EXISTS", "Username đã được sử dụng.");
@@ -134,5 +137,12 @@ public class UserEnrollService {
         }
 
         cookiesService.clearAllCookies(response);
+    }
+
+    public UsernameAvailabilityDto checkUsernameAvailability(String username) {
+        boolean isAvailable = !userRepository.existsByUsername(username);
+        return UsernameAvailabilityDto.builder()
+                .available(isAvailable)
+                .build();
     }
 }

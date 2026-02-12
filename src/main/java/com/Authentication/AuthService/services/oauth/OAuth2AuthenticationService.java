@@ -2,12 +2,11 @@ package com.Authentication.AuthService.services.oauth;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -20,8 +19,12 @@ import com.Authentication.AuthService.dto.OAuth.FaceAuthRequestDto;
 import com.Authentication.AuthService.dto.OAuth.SSOAuthorizeRequestDto;
 import com.Authentication.AuthService.dto.OAuth.SSOStatusResponseDto;
 import com.Authentication.AuthService.dto.OAuth.ValidateOAuthResponseDto;
+import com.Authentication.AuthService.entity.OAuth2Client;
+import com.Authentication.AuthService.entity.OAuth2ClientSecret;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
+import com.Authentication.AuthService.repository.OAuth2ClientRepository;
+import com.Authentication.AuthService.repository.OAuth2ClientSecretRepository;
 import com.Authentication.AuthService.repository.OAuth2CodeRepository;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
@@ -39,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class OAuth2AuthenticationService {
-    private final RegisteredClientRepository registeredClientRepository;
+    private final OAuth2ClientRepository registeredClientRepository;
     private final OAuth2CodeRepository oAuth2CodeRepository;
     private final AuthJwtService authJwtService;
     private final UserRepository userRepository;
@@ -49,6 +52,7 @@ public class OAuth2AuthenticationService {
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
+    private final OAuth2ClientSecretRepository clientSecretRepository;
 
     public OAuth2ValidateClientResponseDto validateParams(String clientId, String redirectUri, String scope,
             String responseType, String state,
@@ -69,14 +73,14 @@ public class OAuth2AuthenticationService {
         // Entity
         // Do đó cần kiểm tra xem có phù hợp với nghiệp vụ không và cân nhắc chuyển sang
         // Entity
-        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
+        OAuth2Client client = registeredClientRepository.findByClientId(clientId);
 
         if (client == null) {
             log.error("client is null");
             throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
         }
 
-        if (client.getRedirectUris() == null | !client.getRedirectUris().contains(redirectUri)) {
+        if (client.getRedirectUri() == null | !client.getRedirectUri().contains(redirectUri)) {
             log.error("redirect uri khong hop le cho client");
             throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
         }
@@ -121,13 +125,13 @@ public class OAuth2AuthenticationService {
     public ValidateOAuthResponseDto validateLogin(AuthenticateRequestDto request, String accessToken,
             HttpServletResponse response) {
         // Kiểm tra 1 lần nữa client và redirect_uri
-        RegisteredClient client = registeredClientRepository.findByClientId(request.getClientId());
+        OAuth2Client client = registeredClientRepository.findByClientId(request.getClientId());
 
         if (client == null) {
             throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
         }
 
-        if (!client.getRedirectUris().contains(request.getRedirectUri())) {
+        if (!client.getRedirectUri().contains(request.getRedirectUri())) {
             throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
         }
 
@@ -238,7 +242,7 @@ public class OAuth2AuthenticationService {
     }
 
     public ValidateOAuthResponseDto authenticateWithFace(FaceAuthRequestDto request, HttpServletResponse response) {
-        RegisteredClient client = validateClient(request.getClientId(), request.getRedirectUri());
+        validateClient(request.getClientId(), request.getRedirectUri());
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy user từ cookie.",
                         HttpStatus.UNAUTHORIZED));
@@ -246,8 +250,9 @@ public class OAuth2AuthenticationService {
             throw new BusinessException("BIOMETRIC_NOT_FOUND",
                     "User chưa đăng ký sinh trắc học.", HttpStatus.UNAUTHORIZED);
         }
-        // boolean faceMatched = faceAuthService.verifyUser(request.getUsername(), request.getImage_b64(),
-        //         user.getHelperData(), user.getKeyHash());
+        // boolean faceMatched = faceAuthService.verifyUser(request.getUsername(),
+        // request.getImage_b64(),
+        // user.getHelperData(), user.getKeyHash());
         boolean faceMatched = true;
         if (!faceMatched) {
             throw new BusinessException("ACCESS_DENIED", "Khuôn mặt không khớp.",
@@ -271,7 +276,7 @@ public class OAuth2AuthenticationService {
 
     public ValidateOAuthResponseDto authorizeWithSSO(SSOAuthorizeRequestDto request, String accessToken,
             HttpServletResponse response) {
-        RegisteredClient client = validateClient(request.getClientId(), request.getRedirectUri());
+        validateClient(request.getClientId(), request.getRedirectUri());
         String usernameFromCookie = authJwtService.extractUsername(accessToken);
         if (!authJwtService.validateAccessToken(accessToken, usernameFromCookie)) {
             cookiesService.clearAccessTokenCookie(response);
@@ -302,18 +307,16 @@ public class OAuth2AuthenticationService {
                 .build();
     }
 
-    private RegisteredClient validateClient(String clientId, String redirectUri) {
-        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
+    private void validateClient(String clientId, String redirectUri) {
+        OAuth2Client client = registeredClientRepository.findByClientId(clientId);
 
         if (client == null) {
             throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
         }
 
-        if (!client.getRedirectUris().contains(redirectUri)) {
+        if (!client.getRedirectUri().contains(redirectUri)) {
             throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
         }
-
-        return client;
     }
 
     public TokenResponseDto exchangeTokens(String grantType, String clientId, String clientSecret, String code,
@@ -347,18 +350,25 @@ public class OAuth2AuthenticationService {
             throw new BusinessException("INVALID_REQUEST", "Redirect Uri là bắt buộc.");
         }
 
-        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
-
-        if (client == null) {
-            throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
+        List<OAuth2ClientSecret> clientSecrets = clientSecretRepository.findByClientClientIdAndIsActiveTrue(clientId);
+        if (clientSecrets.isEmpty()) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client không có Client Secret hợp lệ.",
+                    HttpStatus.UNAUTHORIZED);
         }
 
-        String storedClientSecret = client.getClientSecret();
-        if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
-            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.");
+        boolean secretMatch = false;
+        for (OAuth2ClientSecret clientSecretEntity : clientSecrets) {
+            if (passwordEncoder.matches(clientSecret, clientSecretEntity.getSecretHash())) {
+                secretMatch = true;
+                break;
+            }
         }
 
-        return tokenService.handleAuthorizationCodeFlow(client, code, redirectUri, state, codeVerifier);
+        if (!secretMatch) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.",
+                    HttpStatus.UNAUTHORIZED);
+        }
+        return tokenService.handleAuthorizationCodeFlow(clientId, code, redirectUri, state, codeVerifier);
     }
 
     public RefreshTokenResponseDto refreshToken(String grantType, String clientId, String clientSecret,
@@ -379,15 +389,28 @@ public class OAuth2AuthenticationService {
             throw new BusinessException("INVALID_REQUEST", "Refresh token là bắt buộc.");
         }
 
-        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
+        OAuth2Client client = registeredClientRepository.findByClientId(clientId);
 
         if (client == null) {
-            throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
+            throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.", HttpStatus.NOT_FOUND);
         }
 
-        String storedClientSecret = client.getClientSecret();
-        if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
-            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.");
+        List<OAuth2ClientSecret> clientSecrets = clientSecretRepository.findByClientClientIdAndIsActiveTrue(clientId);
+        if (clientSecrets.isEmpty()) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client không có Client Secret hợp lệ.",
+                    HttpStatus.UNAUTHORIZED);
+        }
+        boolean secretMatch = false;
+        for (OAuth2ClientSecret clientSecretEntity : clientSecrets) {
+            if (passwordEncoder.matches(clientSecret, clientSecretEntity.getSecretHash())) {
+                secretMatch = true;
+                break;
+            }
+        }
+
+        if (!secretMatch) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.",
+                    HttpStatus.UNAUTHORIZED);
         }
 
         return tokenService.handleRefreshTokenFlow(client, refreshToken);
@@ -405,13 +428,22 @@ public class OAuth2AuthenticationService {
         if (clientSecret == null || clientSecret.isBlank()) {
             throw new BusinessException("INVALID_REQUEST", "Client Secret là bắt buộc.");
         }
-        RegisteredClient client = registeredClientRepository.findByClientId(clientId);
-        if (client == null) {
-            throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
+        List<OAuth2ClientSecret> clientSecrets = clientSecretRepository.findByClientClientIdAndIsActiveTrue(clientId);
+        if (clientSecrets.isEmpty()) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client không có Client Secret hợp lệ.",
+                    HttpStatus.UNAUTHORIZED);
         }
-        String storedClientSecret = client.getClientSecret();
-        if (storedClientSecret == null || !passwordEncoder.matches(clientSecret, storedClientSecret)) {
-            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.");
+        boolean secretMatch = false;
+        for (OAuth2ClientSecret clientSecretEntity : clientSecrets) {
+            if (passwordEncoder.matches(clientSecret, clientSecretEntity.getSecretHash())) {
+                secretMatch = true;
+                break;
+            }
+        }
+
+        if (!secretMatch) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không khớp với Client.",
+                    HttpStatus.UNAUTHORIZED);
         }
         refreshTokenService.revokeRefreshToken(token);
     }

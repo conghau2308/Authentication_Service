@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
 import com.Authentication.AuthService.dto.Response.ApiResponse;
+import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.services.enrollment.UserEnrollService;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -34,6 +35,14 @@ public class FaceAuthController {
 
                 return ResponseEntity.status(HttpStatus.CREATED).body(
                                 ApiResponse.success(null, "Đăng ký tài khoản thành công."));
+        }
+
+        @PostMapping("/check-username")
+        public ResponseEntity<ApiResponse<UsernameAvailabilityDto>> checkUsernameAvailability(
+                        @RequestBody String username) {
+                UsernameAvailabilityDto response = userEnrollService.checkUsernameAvailability(username);
+
+                return ResponseEntity.ok(ApiResponse.success(response, "Kiểm tra username thành công."));
         }
 
         @PostMapping("/verify")
