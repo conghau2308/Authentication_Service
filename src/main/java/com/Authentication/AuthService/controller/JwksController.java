@@ -13,10 +13,13 @@ import com.Authentication.AuthService.dto.Jwks.OpenIdConfigurationDto;
 import com.Authentication.AuthService.services.oauth.JwksService;
 import com.Authentication.AuthService.services.oauth.OpenIdConfigurationService;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
 @RequestMapping(".well-known")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "OAuth2 Well-Known Endpoints", description = "Public OAuth2/OpenID Connect well-known configuration and discovery endpoints")
 public class JwksController {
     private final JwksService jwksService;
     private final OpenIdConfigurationService openIdConfigurationService;

@@ -13,11 +13,10 @@ import org.springframework.util.StringUtils;
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
+import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeDto;
 import com.Authentication.AuthService.entity.OAuth2Client;
-import com.Authentication.AuthService.entity.OAuth2Code;
 import com.Authentication.AuthService.entity.OAuth2RefreshToken;
 import com.Authentication.AuthService.exception.business.BusinessException;
-import com.Authentication.AuthService.repository.OAuth2CodeRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,10 +25,10 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class TokenService {
-    private final OAuth2CodeRepository oAuth2CodeRepository;
     private final OAuthJwtService oAuthJwtService;
     private final CookieConfig cookieConfig;
     private final RefreshTokenService refreshTokenService;
+    private final AuthorizationCodeService authorizationCodeService;
 
     private static final String CODE_CHALLENGE_METHOD_SUPPORT = "SHA-256";
 
@@ -40,8 +39,7 @@ public class TokenService {
             String redirectUri,
             String state,
             String codeVerifier) {
-        OAuth2Code authCode = oAuth2CodeRepository.findByCode(code)
-                .orElseThrow(() -> new BusinessException("CODE_NOT_FOUND", "Không tồn tại Authorization code."));
+        AuthorizationCodeDto authCode = authorizationCodeService.validateAuthCode(code);
         if (authCode.isUsed()) {
             throw new BusinessException("CODE_USED", "Authorization code đã được sử dụng");
         }
@@ -72,8 +70,7 @@ public class TokenService {
         validatePkceIfPresent(codeVerifier, authCode.getCodeChallenge(), authCode.getCodeChallengeMethod());
 
         // Đánh dấu auth code đã được sử dụng
-        authCode.setUsed(true);
-        oAuth2CodeRepository.save(authCode);
+        authorizationCodeService.markNonceAsUsed(code, authCode);
 
         String accessToken = oAuthJwtService.generateAccessToken(authCode.getUsername(),
                 clientId, authCode.getScope());

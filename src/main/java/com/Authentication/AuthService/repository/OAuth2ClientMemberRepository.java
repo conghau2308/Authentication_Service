@@ -15,7 +15,7 @@ public interface OAuth2ClientMemberRepository extends JpaRepository<OAuth2Client
     // Để tránh N + 1 query sử dụng join danh sách clientid với bảng clients
     // Và sử dụng dto để ít tồn ram nhất
     @Query("""
-            SELECT new ClientIdDto(cm.client.clientId, cm.client.clientName, cm.client.createdAt, cm.role)
+            SELECT new com.Authentication.AuthService.dto.Client.ClientIdDto(cm.client.clientId, cm.client.clientName, cm.client.createdAt, cm.role)
             FROM OAuth2ClientMember cm
             WHERE cm.user.username = :username
             """)

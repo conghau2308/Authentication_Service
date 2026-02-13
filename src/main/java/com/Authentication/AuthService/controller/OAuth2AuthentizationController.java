@@ -17,6 +17,7 @@ import com.Authentication.AuthService.dto.Response.ApiResponse;
 import com.Authentication.AuthService.services.oauth.OAuth2AuthenticationService;
 import com.Authentication.AuthService.services.oauth.UserInforService;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/oauth2")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "OAuth Authentization", description = "APIs for OAuth authentication and authorization")
 public class OAuth2AuthentizationController {
 
     private final OAuth2AuthenticationService oAuth2AuthenticationService;

@@ -3,12 +3,15 @@ package com.Authentication.AuthService.services.auth;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.Authentication.AuthService.entity.OAuth2Code;
-import com.Authentication.AuthService.repository.OAuth2CodeRepository;
+import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeDto;
+import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,20 +20,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RequiredArgsConstructor
 public class AuthorizationCodeService {
-    private final OAuth2CodeRepository oAuth2CodeRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     // Dùng để tạo chuỗi code ngẫu nhiên an toàn
     private static final SecureRandom secureRandom = new SecureRandom();
     // Dùng để encode code b64
     private static final Base64.Encoder base64Encoder = Base64.getEncoder().withoutPadding();
 
+    private static final String AUTH_CODE_PREFIX = "auth_code:";
+
     @Value("${auth-code.code-expiration-second}")
     private int codeExpirationSecond;
+    @Value("${auth-code.time-to-live-hour-redis}")
+    private int timeToLiveHourRedis;
 
-    private OAuth2Code buildAuthorizationCode(String code, String clientId, String username, String redirectUri,
+    private AuthorizationCodeDto buildAuthorizationCode(String clientId, String username, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
-        return OAuth2Code.builder()
-                .code(code)
+        return AuthorizationCodeDto.builder()
                 .clientId(clientId)
                 .username(username)
                 .redirectUri(redirectUri)
@@ -47,9 +53,10 @@ public class AuthorizationCodeService {
     public String generateAuthorizationCode(String clientId, String username, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
         String code = generateSecureCodeString();
-        OAuth2Code authCode = buildAuthorizationCode(code, clientId, username, redirectUri, scope, state, nonce,
+        AuthorizationCodeDto authCode = buildAuthorizationCode(clientId, username, redirectUri, scope, state, nonce,
                 codeChallenge, codeChallengeMethod);
-        oAuth2CodeRepository.save(authCode);
+        String key = AUTH_CODE_PREFIX + code;
+        redisTemplate.opsForValue().set(key, authCode, timeToLiveHourRedis, TimeUnit.HOURS);
         return code;
     }
 
@@ -57,5 +64,25 @@ public class AuthorizationCodeService {
         byte[] randomBytes = new byte[32]; // 32 bytes = 256 bits
         secureRandom.nextBytes(randomBytes);
         return base64Encoder.encodeToString(randomBytes);
+    }
+
+    // Validate auth code từ redis
+    public AuthorizationCodeDto validateAuthCode(String code) {
+        String key = AUTH_CODE_PREFIX + code;
+        Object value = redisTemplate.opsForValue().get(key);
+
+        if (value == null) {
+            throw new BusinessException("CODE_NOT_FOUND", "Không tồn tại Authorization code.", HttpStatus.NOT_FOUND);
+        }
+        return (AuthorizationCodeDto) value;
+    }
+
+    public void markNonceAsUsed(String code, AuthorizationCodeDto authCode) {
+        String key = AUTH_CODE_PREFIX + code;
+        authCode.setUsed(true);
+        Long ttl = redisTemplate.getExpire(key, TimeUnit.HOURS);
+        if (ttl != null && ttl > 0) {
+            redisTemplate.opsForValue().set(key, authCode, ttl, TimeUnit.HOURS);
+        }
     }
 }

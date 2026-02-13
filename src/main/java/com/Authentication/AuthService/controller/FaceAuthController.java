@@ -14,6 +14,7 @@ import com.Authentication.AuthService.dto.Response.ApiResponse;
 import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.services.enrollment.UserEnrollService;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("auth")
 @Slf4j
 @RequiredArgsConstructor
+@Tag(name = "Face auth", description = "Apis for managing users and authenticate")
 public class FaceAuthController {
         private final UserEnrollService userEnrollService;
 

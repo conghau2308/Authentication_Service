@@ -25,7 +25,6 @@ import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.OAuth2ClientRepository;
 import com.Authentication.AuthService.repository.OAuth2ClientSecretRepository;
-import com.Authentication.AuthService.repository.OAuth2CodeRepository;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
 import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
@@ -43,7 +42,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class OAuth2AuthenticationService {
     private final OAuth2ClientRepository registeredClientRepository;
-    private final OAuth2CodeRepository oAuth2CodeRepository;
     private final AuthJwtService authJwtService;
     private final UserRepository userRepository;
     private final FaceAuthService faceAuthService;
@@ -111,11 +109,6 @@ public class OAuth2AuthenticationService {
         if (hasOpenIdScope && !StringUtils.hasText(nonce)) {
             log.error("Nonce la bat buoc");
             throw new BusinessException("NONCE_MISSED", "Nonce là bắt buộc cho OpenID Connect (OIDC).");
-        }
-
-        if (oAuth2CodeRepository.existsByNonce(nonce)) {
-            log.error("Nonce is used.");
-            throw new BusinessException("NONCE_USED", "Nonce đã được sử dụng.");
         }
 
         return OAuth2ValidateClientResponseDto.builder().clientName(client.getClientName()).scopes(requestedScopes)

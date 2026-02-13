@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,12 +12,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.security.web.util.matcher.OrRequestMatcher;
-import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -40,10 +35,11 @@ public class SecurityConfig {
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
                 configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:3001",
-                                "https://auth-developer-portal.vercel.app"));
+                                "https://auth-developer-portal.vercel.app", "http://localhost:8080"));
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(Arrays.asList(
-                                "Authorization", "Content-Type", "Accept", "X-Requested-With", "ngrok-skip-browser-warning"));
+                                "Authorization", "Content-Type", "Accept", "X-Requested-With",
+                                "ngrok-skip-browser-warning"));
                 configuration.setAllowCredentials(true);
 
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -52,90 +48,46 @@ public class SecurityConfig {
         }
 
         @Bean
-        @Order(1)
-        public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
-                OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
-
-                RequestMatcher authorizationServerMatcher = new OrRequestMatcher(
-                                new AntPathRequestMatcher("/.well-known/oauth-authorization-server"),
-                                new AntPathRequestMatcher("/.well-known/openid-configuration"),
-                                new AntPathRequestMatcher("/oauth2/introspect"),
-                                // new AntPathRequestMatcher("/oauth2/revoke"),
-                                new AntPathRequestMatcher("/.well-known/jwks.json"),
-                                new AntPathRequestMatcher("/userinfo"));
-
-                http
-                                .securityMatcher(authorizationServerMatcher)
-                                .with(authorizationServerConfigurer, configurer -> {
-                                        configurer.oidc(Customizer.withDefaults());
-                                })
-                                // ✅ FIX: Cho phép public access đến JWKS endpoints
-                                .authorizeHttpRequests(authorize -> authorize
-                                                .requestMatchers("/.well-known/jwks.json").permitAll()
-                                                .requestMatchers("/.well-known/openid-configuration").permitAll()
-                                                .anyRequest().authenticated())
-                                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                                .cors(Customizer.withDefaults())
-                                .csrf(AbstractHttpConfigurer::disable);
-
-                return http.build();
-        }
-
-        @Bean
-        @Order(2)
-        public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
                 http
                                 .authorizeHttpRequests(authorize -> authorize
+
                                                 .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
                                                 .permitAll()
 
                                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                                                // ✅ JWKS endpoints - public access
+                                                // Public endpoints
                                                 .requestMatchers("/.well-known/**").permitAll()
-
                                                 .requestMatchers("/auth/**").permitAll()
                                                 .requestMatchers("/oauth2/**").permitAll()
-
-                                                // ✅ OAuth2 custom endpoints
-                                                .requestMatchers("/oauth2/validate").permitAll()
-                                                .requestMatchers("oauth2/authorize").permitAll()
-                                                .requestMatchers("/oauth2/token").permitAll()
-                                                .requestMatchers("/oauth2/auth/login").permitAll()
-                                                .requestMatchers("/oauth2/revoke").permitAll()
-                                                .requestMatchers("/oauth2/userinfo").permitAll()
-
-                                                // ✅ Face login page
                                                 .requestMatchers("/face-login").permitAll()
-
-                                                // ✅ Portal endpoints
-                                                .requestMatchers("/portal/demo-login").permitAll()
                                                 .requestMatchers("/portal/login", "/portal/register").permitAll()
-                                                .requestMatchers("/portal/api/v1/enroll/**").authenticated()
-
-                                                // ✅ Demo endpoints
+                                                .requestMatchers("/portal/demo-login").permitAll()
                                                 .requestMatchers("/demo/**").permitAll()
-
-                                                // ✅ Error page
                                                 .requestMatchers("/error").permitAll()
+                                                .requestMatchers(
+                                                                "/swagger-ui/**",
+                                                                "/v3/api-docs/**",
+                                                                "/swagger-ui.html")
+                                                .permitAll()
 
-                                                // Static resources
+                                                // Static
                                                 .requestMatchers("/css/**", "/js/**", "/images/**", "/favicon.ico")
                                                 .permitAll()
 
+                                                // Protected
+                                                .requestMatchers("/portal/api/v1/enroll/**").authenticated()
+
                                                 .anyRequest().authenticated())
-                                // ✅ QUAN TRỌNG NHẤT
+
+                                // 🔥 Stateless vì dùng JWT
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                                // ✅ QUAN TRỌNG NHẤT
+                                // 🔥 Custom JWT filter của bạn
                                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
-                                .logout(logout -> logout
-                                                .logoutUrl("/logout")
-                                                .logoutSuccessUrl("/portal/login?logout")
-                                                .invalidateHttpSession(true)
-                                                .deleteCookies("JSESSIONID"))
                                 .cors(Customizer.withDefaults())
                                 .csrf(AbstractHttpConfigurer::disable);
 
