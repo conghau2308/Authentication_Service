@@ -1,7 +1,7 @@
 package com.Authentication.AuthService.services.enrollment;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -10,14 +10,14 @@ import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
 import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
+import com.Authentication.AuthService.dto.Auth.RefreshTokenData;
 import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
-import com.Authentication.AuthService.entity.AuthRefreshToken;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
-import com.Authentication.AuthService.repository.AuthRefreshTokenRepository;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
+import com.Authentication.AuthService.services.auth.RefreshTokenService;
 import com.Authentication.AuthService.services.cookies.CookiesService;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,9 +30,9 @@ public class UserEnrollService {
     private final UserRepository userRepository;
     private final FaceAuthService faceAuthService;
     private final AuthJwtService authJwtService;
-    private final AuthRefreshTokenRepository authRefreshTokenRepository;
     private final CookiesService cookiesService;
     private final CookieConfig cookieConfig;
+    private final RefreshTokenService refreshTokenService;
 
     @Transactional
     public void enroll(UserEnrollRequestDto request) {
@@ -89,16 +89,14 @@ public class UserEnrollService {
                     user.getName());
             // Tạo refresh token
             String refreshToken = authJwtService.generateRefreshToken(user.getUsername());
-            // Revoke các token cũ
-            authRefreshTokenRepository.revokeAllByUsername(user.getUsername(), LocalDateTime.now());
 
             // Lưu refresh token mới
-            AuthRefreshToken refreshtokensaved = AuthRefreshToken.builder()
-                    .token(refreshToken)
+            RefreshTokenData refreshtokensaved = RefreshTokenData.builder()
                     .username(user.getUsername())
-                    .expiresAt(LocalDateTime.now().plusMinutes(cookieConfig.getRefreshTokenMaxAge()))
+                    .issuedAt(Instant.now())
+                    .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
                     .build();
-            authRefreshTokenRepository.save(refreshtokensaved);
+            refreshTokenService.saveRefreshTokenToRedis(refreshToken, refreshtokensaved);
 
             // Set cookie http-only cho access token vaf refresh token
             cookiesService.setSecureAllCookies(response, accessToken, refreshToken);
@@ -117,9 +115,9 @@ public class UserEnrollService {
         }
 
         // Kiểm tra nếu refresh token còn hạn thì không revoke
-        Optional<AuthRefreshToken> refreshTokenOpt = authRefreshTokenRepository.findByToken(refreshToken);
+        RefreshTokenData refreshTokenOpt = refreshTokenService.getRefreshTokenDataFromRedis(refreshToken);
         // Chú ý phần isexpired có cần thiết không
-        if (refreshTokenOpt.isEmpty() || refreshTokenOpt.get().isRevoked() || refreshTokenOpt.get().isExpired()) {
+        if (refreshTokenOpt.isRevoked() || refreshTokenOpt.isExpired()) {
             throw new BusinessException("TOKEN_REVOKED", "Refresh token đã bị thu hồi.", HttpStatus.UNAUTHORIZED);
         }
 

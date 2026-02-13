@@ -1,6 +1,7 @@
 package com.Authentication.AuthService.dto.Auth;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,9 +16,14 @@ public class RefreshTokenData {
     private String username;
     private Instant expiresAt;
     private Instant issuedAt;
-    private Instant revokedAt;
+    @Builder.Default
+    private Instant revokedAt = null;
 
     public boolean isRevoked() {
         return revokedAt != null;
+    }
+
+    public boolean isExpired() {
+        return Instant.now().isAfter(expiresAt);
     }
 }
