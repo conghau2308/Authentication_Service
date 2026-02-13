@@ -26,7 +26,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class OAuthJwtService {
+public class JwtService {
     private static final String TOKEN_TYPE_ACCESS = "access";
     private static final String TOKEN_TYPE_REFRESH = "refresh";
     private static final String TOKEN_TYPE_ID = "id";

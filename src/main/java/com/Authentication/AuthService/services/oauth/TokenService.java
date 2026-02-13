@@ -5,17 +5,21 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
 import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeData;
+import com.Authentication.AuthService.dto.OAuth.RefreshTokenData;
 import com.Authentication.AuthService.entity.OAuth2Client;
-import com.Authentication.AuthService.entity.OAuth2RefreshToken;
+import com.Authentication.AuthService.enums.RedisKeyPrefix;
 import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -25,31 +29,23 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class TokenService {
-    private final OAuthJwtService oAuthJwtService;
+    private final JwtService jwtService;
     private final CookieConfig cookieConfig;
     private final RefreshTokenService refreshTokenService;
     private final AuthorizationCodeService authorizationCodeService;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final PasswordEncoder passwordEncoder;
 
     private static final String CODE_CHALLENGE_METHOD_SUPPORT = "SHA-256";
 
-    @Transactional
     public TokenResponseDto handleAuthorizationCodeFlow(
             String clientId,
             String code,
             String redirectUri,
             String state,
             String codeVerifier) {
-        AuthorizationCodeData authCode = authorizationCodeService.validateAuthCode(code);
-        if (authCode.isUsed()) {
-            throw new BusinessException("CODE_USED", "Authorization code đã được sử dụng");
-        }
+        AuthorizationCodeData authCode = authorizationCodeService.validateAndDeleteAuthCode(code);
 
-        // Chú ý xem có nên verify nonce đã dử dụng ở đây không vì auth code cùng nonce
-        // nên auth code mà used = true thì nonce cũng là used = true
-
-        // Chú ý: về thuộc tính expiredAt do nếu sau này sử dụng redis sẽ có thời gian
-        // sống là 5 phút bằng với expired time của auth code nên nếu sau này triển khai
-        // redis thì có thể bỏ thuộc tính này và bỏ qua validate nàynàynày
         if (authCode.getExpiresAt().isBefore(Instant.now())) {
             throw new BusinessException("CODE_EXPIRED", "Authorization code đã hết hạn");
         }
@@ -69,14 +65,13 @@ public class TokenService {
 
         validatePkceIfPresent(codeVerifier, authCode.getCodeChallenge(), authCode.getCodeChallengeMethod());
 
-        // Đánh dấu auth code đã được sử dụng
-        authorizationCodeService.markNonceAsUsed(code, authCode);
-
-        String accessToken = oAuthJwtService.generateAccessToken(authCode.getUsername(),
+        String accessToken = jwtService.generateAccessToken(authCode.getUsername(),
                 clientId, authCode.getScope());
-        String idToken = oAuthJwtService.generateIdToken(authCode.getUsername(),
+        String idToken = jwtService.generateIdToken(authCode.getUsername(),
                 clientId, authCode.getNonce());
-        String refreshToken = oAuthJwtService.generateRefreshToken(authCode.getUsername(), clientId);
+        String refreshToken = jwtService.generateRefreshToken(authCode.getUsername(), clientId);
+        // Lưu refresh token vào redis
+        saveRefreshTokenInRedis(refreshToken, authCode.getUsername(), clientId, authCode.getScope());
 
         return TokenResponseDto.builder()
                 .accessToken(accessToken)
@@ -87,11 +82,10 @@ public class TokenService {
                 .build();
     }
 
-    @Transactional
     public RefreshTokenResponseDto handleRefreshTokenFlow(OAuth2Client client, String refreshToken) {
-        OAuth2RefreshToken token = refreshTokenService.validateRefreshToken(refreshToken, client.getClientId());
+        RefreshTokenData token = refreshTokenService.validateRefreshToken(refreshToken, client.getClientId());
 
-        String newAccessToken = oAuthJwtService.generateAccessToken(token.getUsername(), client.getClientId(),
+        String newAccessToken = jwtService.generateAccessToken(token.getUsername(), client.getClientId(),
                 token.getScope());
         return RefreshTokenResponseDto.builder()
                 .accessToken(newAccessToken)
@@ -116,9 +110,23 @@ public class TokenService {
         try {
             MessageDigest digest = MessageDigest.getInstance(CODE_CHALLENGE_METHOD_SUPPORT);
             byte[] hashed = digest.digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
-            return Base64.getEncoder().withoutPadding().encodeToString(hashed);
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hashed);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
+    }
+
+    private void saveRefreshTokenInRedis(String refreshToken, String username, String clientId, String scope) {
+        String refreshTokenHash = passwordEncoder.encode(refreshToken);
+        String key = RedisKeyPrefix.REFRESH_TOKEN_OAUTH.getPrefix() + refreshTokenHash;
+        RefreshTokenData tokenData = RefreshTokenData.builder()
+                .username(username)
+                .clientId(clientId)
+                .scope(scope)
+                .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
+                .issuedAt(Instant.now())
+                .build();
+        long ttl = cookieConfig.getRefreshTokenMaxAge() + 60 * 10; // Thêm 10 phút đề phòng trễ
+        redisTemplate.opsForValue().set(key, tokenData, ttl, TimeUnit.SECONDS);
     }
 }

@@ -31,8 +31,4 @@ public class AuthorizationCodeData implements Serializable {
 
     // Thời điểm hết hạn
     private Instant expiresAt;
-
-    // Đánh dấu code đã được dùng hay chưa (để chống tấn công replay)
-    @Builder.Default
-    private boolean used = false;
 }

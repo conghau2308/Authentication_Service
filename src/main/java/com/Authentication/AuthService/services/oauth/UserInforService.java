@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class UserInforService {
-    private final OAuthJwtService oAuthJwtService;
+    private final JwtService oAuthJwtService;
     private final UserRepository userRepository;
 
     public UserInforResponseDto getUserInfo(String bearerToken) {
