@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.services.auth;
+package com.Authentication.AuthService.services.oauth;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;

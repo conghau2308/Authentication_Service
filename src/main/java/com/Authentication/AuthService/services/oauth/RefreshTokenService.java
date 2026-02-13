@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.services.auth;
+package com.Authentication.AuthService.services.oauth;
 
 import java.time.Instant;
 

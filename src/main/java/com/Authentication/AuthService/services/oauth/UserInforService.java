@@ -7,7 +7,6 @@ import com.Authentication.AuthService.dto.OAuth.UserInforResponseDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.UserRepository;
-import com.Authentication.AuthService.services.auth.OAuthJwtService;
 
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;

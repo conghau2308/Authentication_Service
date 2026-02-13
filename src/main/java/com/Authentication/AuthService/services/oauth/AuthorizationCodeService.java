@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.services.auth;
+package com.Authentication.AuthService.services.oauth;
 
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -10,7 +10,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeDto;
+import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeData;
 import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -34,9 +34,9 @@ public class AuthorizationCodeService {
     @Value("${auth-code.time-to-live-hour-redis}")
     private int timeToLiveHourRedis;
 
-    private AuthorizationCodeDto buildAuthorizationCode(String clientId, String username, String redirectUri,
+    private AuthorizationCodeData buildAuthorizationCode(String clientId, String username, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
-        return AuthorizationCodeDto.builder()
+        return AuthorizationCodeData.builder()
                 .clientId(clientId)
                 .username(username)
                 .redirectUri(redirectUri)
@@ -53,7 +53,7 @@ public class AuthorizationCodeService {
     public String generateAuthorizationCode(String clientId, String username, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
         String code = generateSecureCodeString();
-        AuthorizationCodeDto authCode = buildAuthorizationCode(clientId, username, redirectUri, scope, state, nonce,
+        AuthorizationCodeData authCode = buildAuthorizationCode(clientId, username, redirectUri, scope, state, nonce,
                 codeChallenge, codeChallengeMethod);
         String key = AUTH_CODE_PREFIX + code;
         redisTemplate.opsForValue().set(key, authCode, timeToLiveHourRedis, TimeUnit.HOURS);
@@ -67,17 +67,17 @@ public class AuthorizationCodeService {
     }
 
     // Validate auth code từ redis
-    public AuthorizationCodeDto validateAuthCode(String code) {
+    public AuthorizationCodeData validateAuthCode(String code) {
         String key = AUTH_CODE_PREFIX + code;
         Object value = redisTemplate.opsForValue().get(key);
 
         if (value == null) {
             throw new BusinessException("CODE_NOT_FOUND", "Không tồn tại Authorization code.", HttpStatus.NOT_FOUND);
         }
-        return (AuthorizationCodeDto) value;
+        return (AuthorizationCodeData) value;
     }
 
-    public void markNonceAsUsed(String code, AuthorizationCodeDto authCode) {
+    public void markNonceAsUsed(String code, AuthorizationCodeData authCode) {
         String key = AUTH_CODE_PREFIX + code;
         authCode.setUsed(true);
         Long ttl = redisTemplate.getExpire(key, TimeUnit.HOURS);

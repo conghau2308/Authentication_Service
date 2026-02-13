@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.services.auth;
+package com.Authentication.AuthService.services.oauth;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -13,7 +13,7 @@ import org.springframework.util.StringUtils;
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
-import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeDto;
+import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeData;
 import com.Authentication.AuthService.entity.OAuth2Client;
 import com.Authentication.AuthService.entity.OAuth2RefreshToken;
 import com.Authentication.AuthService.exception.business.BusinessException;
@@ -39,7 +39,7 @@ public class TokenService {
             String redirectUri,
             String state,
             String codeVerifier) {
-        AuthorizationCodeDto authCode = authorizationCodeService.validateAuthCode(code);
+        AuthorizationCodeData authCode = authorizationCodeService.validateAuthCode(code);
         if (authCode.isUsed()) {
             throw new BusinessException("CODE_USED", "Authorization code đã được sử dụng");
         }

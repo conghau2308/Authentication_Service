@@ -14,7 +14,7 @@ import com.Authentication.AuthService.dto.OAuth.SSOStatusResponseDto;
 import com.Authentication.AuthService.dto.OAuth.UserInforResponseDto;
 import com.Authentication.AuthService.dto.OAuth.ValidateOAuthResponseDto;
 import com.Authentication.AuthService.dto.Response.ApiResponse;
-import com.Authentication.AuthService.services.oauth.OAuth2AuthenticationService;
+import com.Authentication.AuthService.services.oauth.AuthenticationService;
 import com.Authentication.AuthService.services.oauth.UserInforService;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 @Tag(name = "OAuth Authentization", description = "APIs for OAuth authentication and authorization")
 public class OAuth2AuthentizationController {
 
-    private final OAuth2AuthenticationService oAuth2AuthenticationService;
+    private final AuthenticationService authenticationService;
     private final UserInforService userInforService;
 
     private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
@@ -50,7 +50,7 @@ public class OAuth2AuthentizationController {
             @RequestParam(value = "code_challenge", required = true) String codeChallenge,
             @RequestParam(value = "code_challenge_method", required = true) String codeChallengeMethod) {
 
-        OAuth2ValidateClientResponseDto result = oAuth2AuthenticationService.validateParams(clientId, redirectUri,
+        OAuth2ValidateClientResponseDto result = authenticationService.validateParams(clientId, redirectUri,
                 scope, responseType, state, nonce, codeChallenge, codeChallengeMethod);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Các tham số là hợp lệ."));
@@ -66,7 +66,7 @@ public class OAuth2AuthentizationController {
             @RequestBody AuthenticateRequestDto request,
             @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken,
             HttpServletResponse httpResponse) {
-        ValidateOAuthResponseDto result = oAuth2AuthenticationService.validateLogin(request, accessToken, httpResponse);
+        ValidateOAuthResponseDto result = authenticationService.validateLogin(request, accessToken, httpResponse);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Xác thực thành công."));
     }
@@ -75,15 +75,15 @@ public class OAuth2AuthentizationController {
     public ResponseEntity<ApiResponse<SSOStatusResponseDto>> checkSSOStatus(
             @RequestBody CheckSSORequestDto request,
             @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken) {
-        SSOStatusResponseDto result = oAuth2AuthenticationService.checkSSOStatus(request, accessToken);
+        SSOStatusResponseDto result = authenticationService.checkSSOStatus(request, accessToken);
         return ResponseEntity.ok(ApiResponse.success(result, "KIểm tra session thành công."));
     }
 
     @PostMapping("/authorize/face-auth")
     public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authenticateWithFace(
             @RequestBody FaceAuthRequestDto request, HttpServletResponse response) {
-        ValidateOAuthResponseDto result = oAuth2AuthenticationService.authenticateWithFace(request, response);
-        return ResponseEntity.ok(ApiResponse.success(result, "Xác thực khuôn mtajw thành công."));
+        ValidateOAuthResponseDto result = authenticationService.authenticateWithFace(request, response);
+        return ResponseEntity.ok(ApiResponse.success(result, "Xác thực khuôn mặt thành công."));
     }
 
     @PostMapping("authorize/sso")
@@ -91,7 +91,7 @@ public class OAuth2AuthentizationController {
             @RequestBody SSOAuthorizeRequestDto request,
             @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken,
             HttpServletResponse response) {
-        ValidateOAuthResponseDto result = oAuth2AuthenticationService.authorizeWithSSO(request, accessToken, response);
+        ValidateOAuthResponseDto result = authenticationService.authorizeWithSSO(request, accessToken, response);
         return ResponseEntity.ok(ApiResponse.success(result, "Xác thực SSO thành công."));
     }
 
@@ -107,7 +107,7 @@ public class OAuth2AuthentizationController {
             @RequestParam(value = "code_verifier", required = true) String codeVerifier,
             @RequestParam(value = "state", required = true) String state,
             @RequestParam(value = "redirect_uri", required = true) String redirectUri) {
-        TokenResponseDto result = oAuth2AuthenticationService.exchangeTokens(grantType, clientId, clientSecret, code,
+        TokenResponseDto result = authenticationService.exchangeTokens(grantType, clientId, clientSecret, code,
                 codeVerifier, state, redirectUri);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Đổi tokens thành công."));
@@ -120,7 +120,7 @@ public class OAuth2AuthentizationController {
             @RequestParam(value = "client_id", required = true) String clientId,
             @RequestParam(value = "client_secret", required = true) String clientSecret,
             @RequestParam(value = "refresh_code", required = true) String refreshToken) {
-        RefreshTokenResponseDto result = oAuth2AuthenticationService.refreshToken(grantType, clientId, clientSecret,
+        RefreshTokenResponseDto result = authenticationService.refreshToken(grantType, clientId, clientSecret,
                 refreshToken);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Refresh thành công."));
@@ -136,7 +136,7 @@ public class OAuth2AuthentizationController {
             @RequestParam("client_id") String clientId,
             @RequestParam("client_secret") String clientSecret) {
 
-        oAuth2AuthenticationService.revoke(token, tokenTypeHint, clientId, clientSecret);
+        authenticationService.revoke(token, tokenTypeHint, clientId, clientSecret);
 
         return ResponseEntity.ok(ApiResponse.success(null, "Revoke token thành công."));
     }
@@ -163,7 +163,7 @@ public class OAuth2AuthentizationController {
     public ResponseEntity<?> logout(
             @CookieValue(value = REFRESH_TOKEN_COOKIE, required = true) String refreshToken,
             HttpServletResponse response) {
-        oAuth2AuthenticationService.logout(refreshToken, response);
+        authenticationService.logout(refreshToken, response);
 
         return ResponseEntity.ok(ApiResponse.success(null, "Đăng xuất thành công."));
     }

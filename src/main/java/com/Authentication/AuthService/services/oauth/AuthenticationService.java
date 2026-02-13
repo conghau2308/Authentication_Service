@@ -27,10 +27,7 @@ import com.Authentication.AuthService.repository.OAuth2ClientRepository;
 import com.Authentication.AuthService.repository.OAuth2ClientSecretRepository;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
-import com.Authentication.AuthService.services.auth.AuthorizationCodeService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
-import com.Authentication.AuthService.services.auth.RefreshTokenService;
-import com.Authentication.AuthService.services.auth.TokenService;
 import com.Authentication.AuthService.services.cookies.CookiesService;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -40,7 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class OAuth2AuthenticationService {
+public class AuthenticationService {
     private final OAuth2ClientRepository registeredClientRepository;
     private final AuthJwtService authJwtService;
     private final UserRepository userRepository;

@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AuthorizationCodeDto implements Serializable {
+public class AuthorizationCodeData implements Serializable {
     private String code;
 
     // User đã đăng nhập
