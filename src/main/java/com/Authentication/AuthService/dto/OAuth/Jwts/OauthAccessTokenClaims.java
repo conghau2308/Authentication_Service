@@ -17,7 +17,7 @@ import lombok.experimental.SuperBuilder;
 public class OauthAccessTokenClaims extends OauthBaseTokenClaims {
     private String client_id;
     private String scope;
-    private String username;
+    private String user_id;
 
     public Map<String, Object> toClaimsMap() {
         Map<String, Object> claims = new HashMap<>();
@@ -25,7 +25,7 @@ public class OauthAccessTokenClaims extends OauthBaseTokenClaims {
         claims.put("jti", getJti());
         claims.put("client_id", client_id);
         claims.put("scope", scope);
-        claims.put("username", username);
+        claims.put("user_id", user_id);
         return claims;
     }
 }

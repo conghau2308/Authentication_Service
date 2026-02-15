@@ -7,7 +7,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum RedisKeyPrefix {
     AUTH_CODE("auth_code:"),
-    REFRESH_TOKEN_OAUTH("refresh_token_oauth:"),
+    FAMILY_REFRESH_TOKEN_OAUTH("family_refresh_token_oauth:"),
+    ACCESS_TOKEN_OAUTH("access_token_oauth:"),
     REFRESH_TOKEN_AUTH("refresh_token_auth:");
 
     private final String prefix;

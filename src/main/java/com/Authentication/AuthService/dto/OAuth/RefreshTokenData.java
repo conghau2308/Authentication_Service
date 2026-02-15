@@ -13,7 +13,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RefreshTokenData implements Serializable {
-    private String username;
+    private String tokenHashed;
+    private String userId;
     private String clientId;
     private String scope;
     private Instant expiresAt;
@@ -23,4 +24,13 @@ public class RefreshTokenData implements Serializable {
     private boolean revoked = false;
 
     private Instant revokedAt;
+
+    public boolean isExpired() {
+        return Instant.now().isAfter(expiresAt);
+    }
+
+    public void revoke() {
+        this.revoked = true;
+        this.revokedAt = Instant.now();
+    }
 }

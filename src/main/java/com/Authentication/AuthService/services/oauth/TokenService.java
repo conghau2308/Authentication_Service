@@ -5,21 +5,15 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.concurrent.TimeUnit;
 
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.Authentication.AuthService.config.CookieConfig;
-import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
 import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeData;
-import com.Authentication.AuthService.dto.OAuth.RefreshTokenData;
-import com.Authentication.AuthService.entity.OAuth2Client;
-import com.Authentication.AuthService.enums.RedisKeyPrefix;
 import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -33,8 +27,6 @@ public class TokenService {
     private final CookieConfig cookieConfig;
     private final RefreshTokenService refreshTokenService;
     private final AuthorizationCodeService authorizationCodeService;
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final PasswordEncoder passwordEncoder;
 
     private static final String CODE_CHALLENGE_METHOD_SUPPORT = "SHA-256";
 
@@ -65,13 +57,12 @@ public class TokenService {
 
         validatePkceIfPresent(codeVerifier, authCode.getCodeChallenge(), authCode.getCodeChallengeMethod());
 
-        String accessToken = jwtService.generateAccessToken(authCode.getUsername(),
+        String accessToken = jwtService.generateAccessToken(authCode.getUserId(),
                 clientId, authCode.getScope());
-        String idToken = jwtService.generateIdToken(authCode.getUsername(),
+        String idToken = jwtService.generateIdToken(authCode.getUserId(),
                 clientId, authCode.getNonce());
-        String refreshToken = jwtService.generateRefreshToken(authCode.getUsername(), clientId);
-        // Lưu refresh token vào redis
-        saveRefreshTokenInRedis(refreshToken, authCode.getUsername(), clientId, authCode.getScope());
+        String refreshToken = refreshTokenService.generateAndSaveRefreshToken(authCode.getUserId(),
+                authCode.getClientId(), authCode.getScope());
 
         return TokenResponseDto.builder()
                 .accessToken(accessToken)
@@ -79,20 +70,6 @@ public class TokenService {
                 .refreshToken(refreshToken)
                 .expiresIn(cookieConfig.getAccessTokenMaxAge())
                 .scope(authCode.getScope())
-                .build();
-    }
-
-    public RefreshTokenResponseDto handleRefreshTokenFlow(OAuth2Client client, String refreshToken) {
-        RefreshTokenData token = refreshTokenService.validateRefreshToken(refreshToken, client.getClientId());
-
-        String newAccessToken = jwtService.generateAccessToken(token.getUsername(), client.getClientId(),
-                token.getScope());
-        return RefreshTokenResponseDto.builder()
-                .accessToken(newAccessToken)
-                .expiresIn(cookieConfig.getAccessTokenMaxAge())
-                .tokenType("Bearer")
-                .refreshToken(refreshToken) // Gửi lại refresh token cũ --> Chú ý nếu dùng OAuth2.1 thì rotation
-                .scope(token.getScope())
                 .build();
     }
 
@@ -114,19 +91,5 @@ public class TokenService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
-    }
-
-    private void saveRefreshTokenInRedis(String refreshToken, String username, String clientId, String scope) {
-        String refreshTokenHash = passwordEncoder.encode(refreshToken);
-        String key = RedisKeyPrefix.REFRESH_TOKEN_OAUTH.getPrefix() + refreshTokenHash;
-        RefreshTokenData tokenData = RefreshTokenData.builder()
-                .username(username)
-                .clientId(clientId)
-                .scope(scope)
-                .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
-                .issuedAt(Instant.now())
-                .build();
-        long ttl = cookieConfig.getRefreshTokenMaxAge() + 60 * 10; // Thêm 10 phút đề phòng trễ
-        redisTemplate.opsForValue().set(key, tokenData, ttl, TimeUnit.SECONDS);
     }
 }

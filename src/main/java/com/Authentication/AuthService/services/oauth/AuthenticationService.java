@@ -403,7 +403,7 @@ public class AuthenticationService {
                     HttpStatus.UNAUTHORIZED);
         }
 
-        return tokenService.handleRefreshTokenFlow(client, refreshToken);
+        return refreshTokenService.rotateEncryptedOpaqueToken(refreshToken, clientId);
     }
 
     public void revoke(String token, String tokenTypeHint, String clientId, String clientSecret) {

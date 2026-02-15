@@ -33,11 +33,11 @@ public class AuthorizationCodeService {
     @Value("${auth-code.time-to-live-minute-redis}")
     private int timeToLiveMinuteRedis;
 
-    private AuthorizationCodeData buildAuthorizationCode(String clientId, String username, String redirectUri,
+    private AuthorizationCodeData buildAuthorizationCode(String clientId, String userId, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
         return AuthorizationCodeData.builder()
                 .clientId(clientId)
-                .username(username)
+                .userId(userId)
                 .redirectUri(redirectUri)
                 .scope(scope)
                 .state(state)
@@ -48,10 +48,10 @@ public class AuthorizationCodeService {
                 .build();
     }
 
-    public String generateAuthorizationCode(String clientId, String username, String redirectUri,
+    public String generateAuthorizationCode(String clientId, String userId, String redirectUri,
             String scope, String state, String nonce, String codeChallenge, String codeChallengeMethod) {
         String code = generateSecureCodeString();
-        AuthorizationCodeData authCode = buildAuthorizationCode(clientId, username, redirectUri, scope, state, nonce,
+        AuthorizationCodeData authCode = buildAuthorizationCode(clientId, userId, redirectUri, scope, state, nonce,
                 codeChallenge, codeChallengeMethod);
         String key = RedisKeyPrefix.AUTH_CODE.getPrefix() + code;
         redisTemplate.opsForValue().set(key, authCode, timeToLiveMinuteRedis, TimeUnit.MINUTES);

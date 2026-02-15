@@ -1,5 +1,6 @@
 package com.Authentication.AuthService.services.auth;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
@@ -21,12 +22,14 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class AuthJwtService {
 
-    private final SecretKey signingKey;
+    private SecretKey signingKey;
 
     private final CookieConfig cookieConfig;
     private final JwtSecretConfig jwtSecretConfig;
@@ -34,9 +37,8 @@ public class AuthJwtService {
     private static final String TOKEN_TYPE_ACCESS = "access";
     private static final String TOKEN_TYPE_REFRESH = "refresh";
 
-    public AuthJwtService(JwtSecretConfig jwtSecretConfig, CookieConfig cookieConfig) {
-        this.cookieConfig = cookieConfig;
-        this.jwtSecretConfig = jwtSecretConfig;
+    @PostConstruct
+    public void init() {
         this.signingKey = initializeSigningKey(jwtSecretConfig.getSecret());
     }
 

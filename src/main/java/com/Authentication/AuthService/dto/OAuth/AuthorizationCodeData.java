@@ -16,7 +16,7 @@ public class AuthorizationCodeData implements Serializable {
     private String code;
 
     // User đã đăng nhập
-    private String username;
+    private String userId;
 
     // Client đang yêu cầu
     private String clientId;
