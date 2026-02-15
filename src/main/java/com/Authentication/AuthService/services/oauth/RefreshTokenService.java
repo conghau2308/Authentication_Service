@@ -16,7 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.Authentication.AuthService.config.CookieConfig;
-import com.Authentication.AuthService.config.JwtSecretConfig;
 import com.Authentication.AuthService.config.RefreshTokenOAuthEncryptionConfig;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.OAuth.RefreshTokenData;
@@ -27,8 +26,6 @@ import com.Authentication.AuthService.services.token.HashTokenService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

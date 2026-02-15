@@ -279,7 +279,7 @@ public class AuthenticationService {
                     "Username không khớp với session.", HttpStatus.UNAUTHORIZED);
         }
 
-        User user = userRepository.findByUsername(usernameFromCookie)
+        userRepository.findByUsername(usernameFromCookie)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
                         "Không tìm thấy user.", HttpStatus.UNAUTHORIZED));
 

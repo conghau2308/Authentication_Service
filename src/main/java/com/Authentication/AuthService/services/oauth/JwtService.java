@@ -179,10 +179,6 @@ public class JwtService {
         return claims.get("client_id", String.class);
     }
 
-    private String getUsername(Claims claims) {
-        return claims.get("username", String.class);
-    }
-
     private String getUserId(Claims claims) {
         return claims.get("user_id", String.class);
     }
