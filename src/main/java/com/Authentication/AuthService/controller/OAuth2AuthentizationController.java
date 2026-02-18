@@ -1,8 +1,12 @@
 package com.Authentication.AuthService.controller;
 
+import java.util.Arrays;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.AuthenticateRequestDto;
 import com.Authentication.AuthService.dto.OAuth2ValidateClientResponseDto;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
@@ -14,10 +18,13 @@ import com.Authentication.AuthService.dto.OAuth.SSOStatusResponseDto;
 import com.Authentication.AuthService.dto.OAuth.UserInforResponseDto;
 import com.Authentication.AuthService.dto.OAuth.ValidateOAuthResponseDto;
 import com.Authentication.AuthService.dto.Response.ApiResponse;
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.services.oauth.AuthenticationService;
 import com.Authentication.AuthService.services.oauth.UserInforService;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +38,7 @@ public class OAuth2AuthentizationController {
 
     private final AuthenticationService authenticationService;
     private final UserInforService userInforService;
-
-    private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
-    private static final String REFRESH_TOKEN_COOKIE = "REFRESH_TOKEN";
+    private final CookieConfig cookieConfig;
 
     /**
      * API 1: Validate OAuth parameters
@@ -64,9 +69,9 @@ public class OAuth2AuthentizationController {
     @PostMapping("/authorize")
     public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authenticate(
             @RequestBody AuthenticateRequestDto request,
-            @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken,
+            @AuthenticationPrincipal User user,
             HttpServletResponse httpResponse) {
-        ValidateOAuthResponseDto result = authenticationService.validateLogin(request, accessToken, httpResponse);
+        ValidateOAuthResponseDto result = authenticationService.validateLogin(request, user, httpResponse);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Xác thực thành công."));
     }
@@ -74,8 +79,8 @@ public class OAuth2AuthentizationController {
     @PostMapping("/check-session")
     public ResponseEntity<ApiResponse<SSOStatusResponseDto>> checkSSOStatus(
             @RequestBody CheckSSORequestDto request,
-            @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken) {
-        SSOStatusResponseDto result = authenticationService.checkSSOStatus(request, accessToken);
+            @AuthenticationPrincipal User user) {
+        SSOStatusResponseDto result = authenticationService.checkSSOStatus(request, user);
         return ResponseEntity.ok(ApiResponse.success(result, "KIểm tra session thành công."));
     }
 
@@ -89,9 +94,9 @@ public class OAuth2AuthentizationController {
     @PostMapping("authorize/sso")
     public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authorizeWithSSO(
             @RequestBody SSOAuthorizeRequestDto request,
-            @CookieValue(name = ACCESS_TOKEN_COOKIE, required = false) String accessToken,
+            @AuthenticationPrincipal User user,
             HttpServletResponse response) {
-        ValidateOAuthResponseDto result = authenticationService.authorizeWithSSO(request, accessToken, response);
+        ValidateOAuthResponseDto result = authenticationService.authorizeWithSSO(request, user, response);
         return ResponseEntity.ok(ApiResponse.success(result, "Xác thực SSO thành công."));
     }
 
@@ -161,10 +166,23 @@ public class OAuth2AuthentizationController {
      */
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
-            @CookieValue(value = REFRESH_TOKEN_COOKIE, required = true) String refreshToken,
+            HttpServletRequest request,
             HttpServletResponse response) {
+        String refreshToken = extractRefreshTokenFromCookie(request);
         authenticationService.logout(refreshToken, response);
 
         return ResponseEntity.ok(ApiResponse.success(null, "Đăng xuất thành công."));
+    }
+
+    private String extractRefreshTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+
+        return Arrays.stream(request.getCookies())
+                .filter(cookie -> cookieConfig.getRefreshTokenName().equals(cookie.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -10,8 +10,13 @@ import lombok.Data;
 public class ClientSecretDto {
     private String secretId;
     private String maskedValue;
-    private LocalDateTime createAt;
-    private String createdByUserName;
-    private boolean isActive;
-    private String revokedByUserName;
+    private LocalDateTime createdAt;
+    private UserOfClientResponseDto createdByUser;
+
+    @Builder.Default
+    private boolean isActive = true;
+    @Builder.Default
+    private LocalDateTime revokedAt = null;
+    @Builder.Default
+    private UserOfClientResponseDto revokedByUser = null;
 }

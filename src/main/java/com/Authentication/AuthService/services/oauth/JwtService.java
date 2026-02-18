@@ -18,7 +18,9 @@ import com.Authentication.AuthService.config.JwtSecretConfig;
 import com.Authentication.AuthService.dto.OAuth.Jwts.OauthAccessTokenClaims;
 import com.Authentication.AuthService.dto.OAuth.Jwts.OauthIdTokenClaims;
 import com.Authentication.AuthService.dto.OAuth.Jwts.OauthRefreshTokenClaims;
+import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
+import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.crypto.RsaKeyManagerService;
 
 import java.nio.charset.StandardCharsets;
@@ -45,6 +47,7 @@ public class JwtService {
     // sự khác nhau của 2 loại tokens
     private final CookieConfig cookieConfig;
     private final RsaKeyManagerService rsaKeyManagerService;
+    private final UserRepository userRepository;
 
     private final JwtSecretConfig jwtSecretConfig;
     private SecretKey signingKey;
@@ -99,16 +102,22 @@ public class JwtService {
         return createTokenAsym(claims.toClaimsMap(), username, issuer, cookieConfig.getRefreshTokenMaxAge() * 1000);
     }
 
-    public String generateIdToken(String username, String clientId, String nonce) {
+    public String generateIdToken(String userId, String clientId, String nonce, String codeVerifier) {
+        User user = userRepository.findById(UUID.fromString(userId)).orElseThrow(
+                () -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy user.", HttpStatus.UNAUTHORIZED));
+        if (!user.isActive()) {
+            throw new BusinessException("INVALID_USER", "User đã bị cấm trên hệ thống.", HttpStatus.UNAUTHORIZED);
+        }
 
         OauthIdTokenClaims claims = OauthIdTokenClaims.builder()
                 .type(TOKEN_TYPE_ID)
-                .jti(generateUniqueTokenId(username, clientId))
+                .jti(generateUniqueTokenId(userId, clientId))
                 .nonce(nonce)
                 .auth_time(Instant.now().getEpochSecond())
-                .preferred_username(username)
+                .email(user.getEmail())
+                .code_verifier(codeVerifier)
                 .build();
-        return createTokenAsym(claims.toClaimsMap(), username, clientId, cookieConfig.getAccessTokenMaxAge() * 1000);
+        return createTokenAsym(claims.toClaimsMap(), userId, clientId, cookieConfig.getAccessTokenMaxAge() * 1000);
     }
 
     private String generateUniqueTokenId(String user, String clientId) {

@@ -3,7 +3,6 @@ package com.Authentication.AuthService.services.oauth;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -112,7 +111,7 @@ public class AuthenticationService {
                 .build();
     }
 
-    public ValidateOAuthResponseDto validateLogin(AuthenticateRequestDto request, String accessToken,
+    public ValidateOAuthResponseDto validateLogin(AuthenticateRequestDto request, User user,
             HttpServletResponse response) {
         // Kiểm tra 1 lần nữa client và redirect_uri
         OAuth2Client client = registeredClientRepository.findByClientId(request.getClientId());
@@ -133,27 +132,13 @@ public class AuthenticationService {
         // Chú ý việc quản lý nhiều account
 
         // Kiêm tra SSO
-        if (StringUtils.hasText(accessToken)) {
-            try {
-                String usernameFromCookie = authJwtService.extractUsername(accessToken);
-                if (authJwtService.validateAccessToken(accessToken, usernameFromCookie)) {
-                    Optional<User> user = userRepository.findByUsername(usernameFromCookie);
-                    if (user == null) {
-                        throw new BusinessException("USER_NOT_FOUND", "Không tìm thấy user từ cookie.",
-                                HttpStatus.UNAUTHORIZED);
-                    }
-                    if (usernameFromCookie.equals(request.getUsername())) {
-                        username = usernameFromCookie;
-                        ssoUsed = true;
-                    } else
-                        throw new BusinessException("USERNAME_DIFFERENT",
-                                "Username trong yêu cầu và username trong cookie là khác nhau. Vui lòng đăng nhập.",
-                                HttpStatus.UNAUTHORIZED);
-                }
-            } catch (Exception ex) {
-                cookiesService.clearAccessTokenCookie(response);
-            }
-        }
+        if (user.getUsername().equals(request.getUsername())) {
+            username = user.getUsername();
+            ssoUsed = true;
+        } else
+            throw new BusinessException("USERNAME_DIFFERENT",
+                    "Username của request khác username của Access token.",
+                    HttpStatus.UNAUTHORIZED);
 
         // Khi không có accessToken cookie thì phải đăng nhập face authenticate (nhận
         // accessToken = null trong request)
@@ -166,9 +151,10 @@ public class AuthenticationService {
                 throw new BusinessException("INVALID_REQUEST", "Vui lòng gửi ảnh chụp khuôn mặt.");
             }
 
-            User user = userRepository.findByUsername(request.getUsername())
-                    .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy user.",
-                            HttpStatus.UNAUTHORIZED));
+            // User user = userRepository.findByUsername(request.getUsername())
+            // .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy
+            // user.",
+            // HttpStatus.UNAUTHORIZED));
             if (user.getKeyHash() == null || user.getHelperData() == null) {
                 throw new BusinessException("BIOMETRIC_NOT_FOUND", "User chưa đăng ký sinh trắc học.",
                         HttpStatus.UNAUTHORIZED);
@@ -201,34 +187,14 @@ public class AuthenticationService {
         return ValidateOAuthResponseDto.builder().redirect_url(redirectUrl).sso_used(ssoUsed).build();
     }
 
-    public SSOStatusResponseDto checkSSOStatus(CheckSSORequestDto request, String accessToken) {
-        if (!StringUtils.hasText(accessToken)) {
-            log.error("access token khong hop le.");
-            return SSOStatusResponseDto.builder().ssoAvailable(false).build();
-        }
-        try {
-            String usernameFromCookie = authJwtService.extractUsername(accessToken);
-            if (!authJwtService.validateAccessToken(accessToken, usernameFromCookie)) {
-                log.error("Access token validate failed.");
-                return SSOStatusResponseDto.builder().ssoAvailable(false).build();
-            }
-            Optional<User> user = userRepository.findByUsername(usernameFromCookie);
-            if (user.isEmpty()) {
-                log.error("user is null");
-                return SSOStatusResponseDto.builder().ssoAvailable(false).build();
-            }
+    public SSOStatusResponseDto checkSSOStatus(CheckSSORequestDto request, User user) {
+        boolean usernameMatch = request.getUsername() != null && user.getUsername().equals(request.getUsername());
 
-            boolean usernameMatch = request.getUsername() != null && usernameFromCookie.equals(request.getUsername());
-
-            return SSOStatusResponseDto.builder()
-                    .ssoAvailable(true)
-                    .username(usernameFromCookie)
-                    .usernameMatch(usernameMatch)
-                    .build();
-        } catch (Exception ex) {
-            log.warn("SSO shecked failed: ", ex);
-            return SSOStatusResponseDto.builder().ssoAvailable(false).build();
-        }
+        return SSOStatusResponseDto.builder()
+                .ssoAvailable(usernameMatch)
+                .username(usernameMatch ? request.getUsername() : null)
+                .usernameMatch(usernameMatch)
+                .build();
     }
 
     public ValidateOAuthResponseDto authenticateWithFace(FaceAuthRequestDto request, HttpServletResponse response) {
@@ -264,27 +230,17 @@ public class AuthenticationService {
                 .build();
     }
 
-    public ValidateOAuthResponseDto authorizeWithSSO(SSOAuthorizeRequestDto request, String accessToken,
+    public ValidateOAuthResponseDto authorizeWithSSO(SSOAuthorizeRequestDto request, User user,
             HttpServletResponse response) {
         validateClient(request.getClientId(), request.getRedirectUri());
-        String usernameFromCookie = authJwtService.extractUsername(accessToken);
-        if (!authJwtService.validateAccessToken(accessToken, usernameFromCookie)) {
-            cookiesService.clearAccessTokenCookie(response);
-            throw new BusinessException("INVALID_SESSION", "Session không hợp lệ. Vui lòng đăng nhập lại.",
-                    HttpStatus.UNAUTHORIZED);
-        }
 
-        if (!usernameFromCookie.equals(request.getUsername())) {
+        if (!user.getUsername().equals(request.getUsername())) {
             throw new BusinessException("USERNAME_MISMATCH",
                     "Username không khớp với session.", HttpStatus.UNAUTHORIZED);
         }
 
-        userRepository.findByUsername(usernameFromCookie)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Không tìm thấy user.", HttpStatus.UNAUTHORIZED));
-
         String authCode = authorizationCodeService.generateAuthorizationCode(
-                request.getClientId(), usernameFromCookie, request.getRedirectUri(),
+                request.getClientId(), user.getId().toString(), request.getRedirectUri(),
                 request.getScope(), request.getState(), request.getNonce(),
                 request.getCodeChallenge(), request.getCodeChallengeMethod());
 

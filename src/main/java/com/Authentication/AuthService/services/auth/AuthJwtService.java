@@ -52,32 +52,32 @@ public class AuthJwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(String username, String email, String name) {
+    public String generateAccessToken(String userId, String email, String name) {
 
         AccessTokenClaims claims = AccessTokenClaims.builder()
                 .type(TOKEN_TYPE_ACCESS)
-                .jti(generateUniqueTokenId(username))
+                .jti(generateUniqueTokenId(userId))
                 .email(email)
                 .name(name)
                 .build();
-        return createToken(claims.toClaimsMap(), username, cookieConfig.getAccessTokenMaxAge() * 1000);
+        return createToken(claims.toClaimsMap(), userId, cookieConfig.getAccessTokenMaxAge() * 1000);
     }
 
-    public String generateRefreshToken(String username) {
+    public String generateRefreshToken(String userId) {
 
         RefreshTokenClaims claims = RefreshTokenClaims.builder()
                 .type(TOKEN_TYPE_REFRESH)
-                .jti(generateUniqueTokenId(username))
+                .jti(generateUniqueTokenId(userId))
                 .build();
-        return createToken(claims.toClaimsMap(), username, cookieConfig.getRefreshTokenMaxAge() * 1000);
+        return createToken(claims.toClaimsMap(), userId, cookieConfig.getRefreshTokenMaxAge() * 1000);
     }
 
-    private String generateUniqueTokenId(String username) {
+    private String generateUniqueTokenId(String userId) {
         String uuid = UUID.randomUUID().toString();
         Long nanoTime = System.nanoTime();
-        int usernameHash = username.hashCode();
+        int userIdHash = userId.hashCode();
 
-        return String.format("%s-%d-%d", uuid, nanoTime, usernameHash);
+        return String.format("%s-%d-%d", uuid, nanoTime, userIdHash);
     }
 
     private String createToken(Map<String, Object> claims, String subject, long expirationMillis) {
@@ -104,7 +104,7 @@ public class AuthJwtService {
                 .getBody();
     }
 
-    private String getUsername(Claims claims) {
+    private String getUserId(Claims claims) {
         return claims.getSubject();
     }
 
@@ -116,11 +116,11 @@ public class AuthJwtService {
         return claims.getExpiration().before(new Date());
     }
 
-    public boolean validateAccessToken(String token, String username) {
+    public boolean validateAccessToken(String token, String userid) {
         try {
             Claims claims = parseToken(token);
 
-            return getUsername(claims).equals(username)
+            return getUserId(claims).equals(userid)
                     && getTokenType(claims).equals(TOKEN_TYPE_ACCESS)
                     && !isTokenExpired(claims);
         } catch (JwtException | IllegalArgumentException e) {
@@ -141,7 +141,7 @@ public class AuthJwtService {
         }
     }
 
-    public String extractUsername(String token) {
+    public String extractUserId(String token) {
         return parseToken(token).getSubject();
     }
 

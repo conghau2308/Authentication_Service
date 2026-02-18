@@ -17,7 +17,8 @@ import lombok.experimental.SuperBuilder;
 public class OauthIdTokenClaims extends OauthAccessTokenClaims {
     private String nonce;
     private Long auth_time;
-    private String preferred_username;
+    private String email;
+    private String code_verifier;
 
     public Map<String, Object> toClaimsMap() {
         Map<String, Object> claims = new HashMap<>();
@@ -25,7 +26,8 @@ public class OauthIdTokenClaims extends OauthAccessTokenClaims {
         claims.put("jti", getJti());
         claims.put("nonce", nonce);
         claims.put("auth_time", auth_time);
-        claims.put("preferred_username", preferred_username);
+        claims.put("email", email);
+        claims.put("code_verifier", code_verifier);
 
         return claims;
     }

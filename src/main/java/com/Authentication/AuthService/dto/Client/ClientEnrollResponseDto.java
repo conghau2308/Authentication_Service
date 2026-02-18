@@ -12,5 +12,5 @@ public class ClientEnrollResponseDto {
     private String clientName;
     private String redirectUri;
     private LocalDateTime createdAt;
-    private String ownerUsername;
+    private String ownerName;
 }

@@ -1,6 +1,7 @@
 package com.Authentication.AuthService.entity;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -16,54 +17,61 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 
 @Entity
 @Table(name = "oauth2_client_secrets", indexes = {
-    @Index(name = "idx_client_id", columnList = "client_id")
+        @Index(name = "idx_secrets_client_id", columnList = "client_id"),
+        @Index(name = "idx_secrets_is_active", columnList = "is_active")
 })
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class OAuth2ClientSecret {
+
     @Id
-    @Column(name = "secret_id", length = 255)
-    private String secretId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false, columnDefinition = "BINARY(16)")
+    private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private OAuth2Client client;
 
-    @Column(name = "secret_hash", nullable = false)
+    @Column(name = "secret_hash", nullable = false, columnDefinition = "TEXT")
     private String secretHash;
 
-    @Column(name = "secret_hint", nullable = false)
+    @Column(name = "secret_hint", nullable = false, length = 100)
     private String secretHint;
 
-    @Column(name = "is_active")
+    @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
 
-    @Column(name = "created_by", nullable = false, updatable = false)
-    private String createdBy; // User name của người tạo secret
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", updatable = false)
+    private User createdBy;
 
     @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "revoked_at")
     private LocalDateTime revokedAt;
-    
-    @Column(name = "revoke_by")
-    private String revokedBy; // User name của người thu hồi
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "revoke_by")
+    private User revokedBy;
 
     public boolean isValid() {
         return isActive && (revokedAt == null);
     }
 
-    public void revoke(String userName) {
+    public void revoke(User revokedByUser) {
         this.isActive = false;
         this.revokedAt = LocalDateTime.now();
-        this.revokedBy = userName;
+        this.revokedBy = revokedByUser;
     }
 }

@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class RefreshTokenData {
-    private String username;
+    private String userId;
     private Instant expiresAt;
     private Instant issuedAt;
     @Builder.Default

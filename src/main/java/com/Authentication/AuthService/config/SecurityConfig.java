@@ -24,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-        private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
         @Bean
         public PasswordEncoder passwordEncoder() {
@@ -86,7 +85,7 @@ public class SecurityConfig {
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                                 // 🔥 Custom JWT filter của bạn
-                                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                               
 
                                 .cors(Customizer.withDefaults())
                                 .csrf(AbstractHttpConfigurer::disable);

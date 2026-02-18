@@ -22,7 +22,7 @@ import com.Authentication.AuthService.dto.OAuth.RefreshTokenData;
 import com.Authentication.AuthService.dto.OAuth.RefreshTokenMetaData;
 import com.Authentication.AuthService.enums.RedisKeyPrefix;
 import com.Authentication.AuthService.exception.business.BusinessException;
-import com.Authentication.AuthService.services.token.HashTokenService;
+import com.Authentication.AuthService.services.token.TokenCryptoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -45,7 +45,7 @@ public class RefreshTokenService {
     private final JwtService jwtService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
-    private final HashTokenService hashTokenService;
+    private final TokenCryptoService hashTokenService;
     private final CookieConfig cookieConfig;
     private final RefreshTokenOAuthEncryptionConfig refreshTokenOAuthEncryptionConfig;
     private SecretKey signingKey;

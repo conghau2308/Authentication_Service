@@ -25,6 +25,7 @@ public class TokenService {
     private final CookieConfig cookieConfig;
     private final RefreshTokenService refreshTokenService;
     private final AuthorizationCodeService authorizationCodeService;
+    private final AccessTokenService accessTokenService;
 
     private static final String CODE_CHALLENGE_METHOD_SUPPORT = "SHA-256";
 
@@ -55,10 +56,10 @@ public class TokenService {
 
         validatePkceIfPresent(codeVerifier, authCode.getCodeChallenge(), authCode.getCodeChallengeMethod());
 
-        String accessToken = jwtService.generateAccessToken(authCode.getUserId(),
-                clientId, authCode.getScope());
+        String accessToken = accessTokenService.generateAndSaveAccessToken(authCode.getUserId(), authCode.getClientId(),
+                authCode.getScope());
         String idToken = jwtService.generateIdToken(authCode.getUserId(),
-                clientId, authCode.getNonce());
+                authCode.getClientId(), authCode.getNonce(), codeVerifier);
         String refreshToken = refreshTokenService.generateAndSaveRefreshToken(authCode.getUserId(),
                 authCode.getClientId(), authCode.getScope());
 

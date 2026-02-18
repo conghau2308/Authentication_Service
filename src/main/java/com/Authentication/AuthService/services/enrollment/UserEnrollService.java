@@ -2,6 +2,7 @@ package com.Authentication.AuthService.services.enrollment;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -73,8 +74,9 @@ public class UserEnrollService {
             throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
         }
 
-        // boolean result = faceAuthService.verifyUser(request.getUsername(), request.getImageBase64(),
-        //         user.getHelperData(), user.getKeyHash());
+        // boolean result = faceAuthService.verifyUser(request.getUsername(),
+        // request.getImageBase64(),
+        // user.getHelperData(), user.getKeyHash());
         boolean result = true;
 
         if (result) {
@@ -92,7 +94,7 @@ public class UserEnrollService {
 
             // Lưu refresh token mới
             RefreshTokenData refreshtokensaved = RefreshTokenData.builder()
-                    .username(user.getUsername())
+                    .userId(user.getId().toString())
                     .issuedAt(Instant.now())
                     .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
                     .build();
@@ -122,10 +124,14 @@ public class UserEnrollService {
         }
 
         // Tạo access token mới
-        String username = authJwtService.extractUsername(refreshToken);
-        User user = userRepository.findByUsername(username)
+        UUID userId = UUID.fromString(refreshTokenOpt.getUserId());
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tùm thấy user phù hợp."));
-        String accessToken = authJwtService.generateAccessToken(user.getUsername(), user.getEmail(), user.getName());
+        if (!user.isActive()) {
+            throw new BusinessException("INVALID_USER", "User đã bị cấm trên hệ thống.", HttpStatus.UNAUTHORIZED);
+        }
+        String accessToken = authJwtService.generateAccessToken(user.getId().toString(), user.getEmail(),
+                user.getName());
         cookiesService.setSecureAccessCookie(response, accessToken);
     }
 
