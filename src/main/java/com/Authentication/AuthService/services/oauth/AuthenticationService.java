@@ -160,10 +160,9 @@ public class AuthenticationService {
                         HttpStatus.UNAUTHORIZED);
             }
 
-            // boolean result = faceAuthService.verifyUser(request.getUsername(),
-            // request.getImage_b64(),
-            // user.getHelperData(), user.getKeyHash());
-            boolean result = true;
+            boolean result = faceAuthService.verifyUser(request.getUsername(),
+            request.getImage_b64(),
+            user.getHelperData(), user.getKeyHash());
 
             if (!result) {
                 throw new BusinessException("ACCESS_DENIED", "Khuôn mặt không khớp. Vui lòng đăng nhập lại.",

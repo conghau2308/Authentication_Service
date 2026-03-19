@@ -1,7 +1,6 @@
 package com.Authentication.AuthService.entity;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -30,7 +29,7 @@ import lombok.NoArgsConstructor;
                 @Index(name = "idx_members_client_id", columnList = "client_id"),
                 @Index(name = "idx_members_user_id", columnList = "user_id"),
                 @Index(name = "idx_members_is_active", columnList = "is_active"),
-                @Index(name = "idx_members_client_user_active", columnList = "client_id, user_id, is_active"),
+                @Index(name = "idx_members_client_user_active", columnList = "client_id, user_id, is_active")
 }, uniqueConstraints = {
                 @UniqueConstraint(name = "uk_client_user", columnNames = { "client_id", "user_id" })
 })

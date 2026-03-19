@@ -14,7 +14,7 @@ import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;
 
-@Service
+@Service("authRefreshTokenService")
 @RequiredArgsConstructor
 public class RefreshTokenService {
     private final RedisTemplate<String, Object> redisTemplate;

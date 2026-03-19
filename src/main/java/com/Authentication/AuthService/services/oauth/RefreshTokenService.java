@@ -30,7 +30,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Service
+@Service("oauthRefreshTokenService")
 @Slf4j
 @RequiredArgsConstructor
 public class RefreshTokenService {

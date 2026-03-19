@@ -18,7 +18,7 @@ public interface OAuth2ClientMemberRepository extends JpaRepository<OAuth2Client
     @Query("""
             SELECT new com.Authentication.AuthService.dto.Client.ClientIdDto(cm.client.clientId, cm.client.clientName, cm.client.createdAt, cm.role)
             FROM OAuth2ClientMember cm
-            WHERE cm.user_id = :id
+            WHERE cm.id = :id
             """)
     List<ClientIdDto> findClientIdDtosByUserId(UUID id);
 
@@ -32,7 +32,7 @@ public interface OAuth2ClientMemberRepository extends JpaRepository<OAuth2Client
     @Query("""
             SELECT cm
             FROM OAuth2ClientMember cm
-            WHERE cm.client.clientId = :clientId AND cm.user.id = :userId AND cm.is_active = true
+            WHERE cm.client.clientId = :clientId AND cm.user.id = :userId AND cm.isActive = true
             """)
     OAuth2ClientMember findByClientIdAndUserIdIsActive(String clientId, UUID userId);
 }
