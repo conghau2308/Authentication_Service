@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.OAuth.Jwts;
+package com.Authentication.AuthService.dto.oauth.Jwts;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -8,15 +8,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.Authentication.AuthService.dto.Jwks.JwksResponseDto;
-import com.Authentication.AuthService.dto.Jwks.OpenIdConfigurationDto;
+import com.Authentication.AuthService.dto.jwks.JwksResponseDto;
+import com.Authentication.AuthService.dto.jwks.OpenIdConfigurationDto;
 import com.Authentication.AuthService.services.oauth.JwksService;
 import com.Authentication.AuthService.services.oauth.OpenIdConfigurationService;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@RequestMapping(".well-known")
+@RequestMapping("/.well-known")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "OAuth2 Well-Known Endpoints", description = "Public OAuth2/OpenID Connect well-known configuration and discovery endpoints")

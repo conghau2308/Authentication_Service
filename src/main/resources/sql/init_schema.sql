@@ -1,163 +1,219 @@
--- ================================
--- 🔄 RESET DATABASE OAUTH2 + USERS
--- ================================
+-- =====================================================
+-- DROP TABLES IF EXISTS (theo thứ tự ngược FK)
+-- =====================================================
+DROP TABLE IF EXISTS oauth2_client_secrets CASCADE;
+DROP TABLE IF EXISTS oauth2_client_members CASCADE;
+DROP TABLE IF EXISTS oauth2_clients CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
--- Tắt kiểm tra khóa ngoại để tránh lỗi khi xóa bảng có quan hệ
-SET FOREIGN_KEY_CHECKS = 0;
+-- Drop schema nếu cần tạo lại hoàn toàn
+-- DROP SCHEMA IF EXISTS auth_service CASCADE;
 
--- Xóa bảng theo thứ tự phụ thuộc (child → parent)
-DROP TABLE IF EXISTS face_auth_logs;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS client_ownership;
-DROP TABLE IF EXISTS developers;
-DROP TABLE IF EXISTS oauth2_authorization_consent;
-DROP TABLE IF EXISTS oauth2_authorization_codes;
-DROP TABLE IF EXISTS oauth2_authorization;
-DROP TABLE IF EXISTS oauth2_registered_client;
-DROP TABLE IF EXISTS oauth2_refresh_tokens;
+-- =====================================================
+-- CREATE SCHEMA
+-- =====================================================
+CREATE SCHEMA IF NOT EXISTS auth_service;
 
--- Bật lại kiểm tra khóa ngoại
-SET FOREIGN_KEY_CHECKS = 1;
+-- Set search path
+SET search_path TO auth_service, public;
 
--- ================================
--- 🧱 TẠO LẠI CẤU TRÚC BẢNG
--- ================================
-
--- Bảng lưu trữ Client (ứng dụng đăng ký OAuth2)
-CREATE TABLE IF NOT EXISTS oauth2_registered_client (
-    id VARCHAR(100) NOT NULL,
-    client_id VARCHAR(100) NOT NULL,
-    client_id_issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    client_secret VARCHAR(200) DEFAULT NULL,
-    client_secret_expires_at TIMESTAMP DEFAULT NULL,
-    client_name VARCHAR(200) NOT NULL,
-    client_authentication_methods VARCHAR(1000) NOT NULL,
-    authorization_grant_types VARCHAR(1000) NOT NULL,
-    redirect_uris VARCHAR(1000) DEFAULT NULL,
-    post_logout_redirect_uris VARCHAR(1000) DEFAULT NULL,
-    scopes VARCHAR(1000) NOT NULL,
-    client_settings VARCHAR(2000) NOT NULL,
-    token_settings VARCHAR(2000) NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_client_id (client_id)
-);
-
--- Bảng lưu trữ Authorization (mã code, token, refresh, id token)
-CREATE TABLE IF NOT EXISTS oauth2_authorization (
-    id VARCHAR(100) NOT NULL,
-    registered_client_id VARCHAR(100) NOT NULL,
-    principal_name VARCHAR(200) NOT NULL,
-    authorization_grant_type VARCHAR(100) NOT NULL,
-    authorized_scopes VARCHAR(1000) DEFAULT NULL,
-    attributes TEXT DEFAULT NULL,
-    state VARCHAR(500) DEFAULT NULL,
-    authorization_code_value TEXT DEFAULT NULL,
-    authorization_code_issued_at TIMESTAMP DEFAULT NULL,
-    authorization_code_expires_at TIMESTAMP DEFAULT NULL,
-    authorization_code_metadata TEXT DEFAULT NULL,
-    access_token_value TEXT DEFAULT NULL,
-    access_token_issued_at TIMESTAMP DEFAULT NULL,
-    access_token_expires_at TIMESTAMP DEFAULT NULL,
-    access_token_metadata TEXT DEFAULT NULL,
-    access_token_type VARCHAR(100) DEFAULT NULL,
-    access_token_scopes VARCHAR(1000) DEFAULT NULL,
-    oidc_id_token_value TEXT DEFAULT NULL,
-    oidc_id_token_issued_at TIMESTAMP DEFAULT NULL,
-    oidc_id_token_expires_at TIMESTAMP DEFAULT NULL,
-    oidc_id_token_metadata TEXT DEFAULT NULL,
-    refresh_token_value TEXT DEFAULT NULL,
-    refresh_token_issued_at TIMESTAMP DEFAULT NULL,
-    refresh_token_expires_at TIMESTAMP DEFAULT NULL,
-    refresh_token_metadata TEXT DEFAULT NULL,
-    PRIMARY KEY (id)
-);
-
--- Bảng lưu sự đồng ý (consent)
-CREATE TABLE IF NOT EXISTS oauth2_authorization_consent (
-    registered_client_id VARCHAR(100) NOT NULL,
-    principal_name VARCHAR(200) NOT NULL,
-    authorities VARCHAR(1000) NOT NULL,
-    PRIMARY KEY (registered_client_id, principal_name)
-);
-
--- Bảng developer (người tạo app OAuth2)
-CREATE TABLE IF NOT EXISTS developers (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    company_name VARCHAR(255),
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    account_non_expired BOOLEAN NOT NULL DEFAULT TRUE,
-    account_non_locked BOOLEAN NOT NULL DEFAULT TRUE,
-    credentials_non_expired BOOLEAN NOT NULL DEFAULT TRUE
-);
-
--- Bảng liên kết Developer ↔ Client (ứng dụng)
-CREATE TABLE IF NOT EXISTS client_ownership (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    developer_id BIGINT NOT NULL,
-    client_id VARCHAR(100) NOT NULL,
-    UNIQUE KEY uk_client_id_ownership (client_id),
-    FOREIGN KEY (developer_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Bảng người dùng (end-users có thể dùng xác thực khuôn mặt)
-CREATE TABLE users (
-    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+-- =====================================================
+-- TABLE: users
+-- =====================================================
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    -- Dữ liệu sinh trắc học WiFaKey (Helper Data & Key Hash)
+    email VARCHAR(255) NOT NULL UNIQUE,
     helper_data TEXT NOT NULL,
     key_hash TEXT NOT NULL,
-
-    -- Thời gian ghi nhận
-    enrolled_at DATETIME NOT NULL,
-    last_verified_at DATETIME NULL
+    role VARCHAR(50) NOT NULL DEFAULT 'USER',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_verified_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Bảng lưu Authorization Codes thủ công (nếu tách riêng)
-CREATE TABLE oauth2_authorization_codes (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    code VARCHAR(255) NOT NULL UNIQUE,
-    username VARCHAR(255) NOT NULL,
-    client_id VARCHAR(255) NOT NULL,
-    redirect_uri VARCHAR(1000),
-    scope VARCHAR(1000),
-    state VARCHAR(255),
-    nonce VARCHAR(255),
-    code_challenge VARCHAR(255),
-    code_challenge_method VARCHAR(50),
-    expires_at DATETIME(6) NOT NULL,
-    used TINYINT(1) NOT NULL DEFAULT 0
-);
+-- Indexes cho users
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
-CREATE TABLE oauth2_refresh_tokens (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    refresh_token VARCHAR(500) UNIQUE NOT NULL,
-    username VARCHAR(255) NOT NULL,
-    client_id VARCHAR(255) NOT NULL,
-    scope VARCHAR(500),
-    expires_at TIMESTAMP NOT NULL,
-    issued_at TIMESTAMP NOT NULL,
-    revoked BOOLEAN DEFAULT FALSE,
-    revoked_at TIMESTAMP NULL,
+-- Comments cho users
+COMMENT ON TABLE users IS 'Bảng lưu trữ thông tin user';
+COMMENT ON COLUMN users.helper_data IS 'Dữ liệu hỗ trợ xác thực';
+COMMENT ON COLUMN users.key_hash IS 'Dữ liệu hỗ trợ xác thực';
+COMMENT ON COLUMN users.last_verified_at IS 'Lần xác thực gần nhất';
+
+-- =====================================================
+-- TABLE: oauth2_clients
+-- =====================================================
+CREATE TABLE IF NOT EXISTS oauth2_clients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id VARCHAR(255) NOT NULL UNIQUE,
+    client_name VARCHAR(255) NOT NULL,
+    client_type VARCHAR(50) NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    scopes TEXT,
+    grant_types TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
     
-    INDEX idx_refresh_token (refresh_token),
-    INDEX idx_username_client (username, client_id),
-    INDEX idx_expires_at (expires_at)
+    -- Foreign Key
+    CONSTRAINT fk_oauth2_clients_created_by 
+        FOREIGN KEY (created_by) 
+        REFERENCES users(id) 
+        ON DELETE SET NULL
 );
 
--- ================================
--- 🌱 DỮ LIỆU KHỞI TẠO
--- ================================
+-- Indexes cho oauth2_clients
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_client_id ON oauth2_clients(client_id);
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_is_active ON oauth2_clients(is_active);
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_client_type ON oauth2_clients(client_type);
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_created_by ON oauth2_clients(created_by);
 
--- ================================
--- 🔍 KIỂM TRA DỮ LIỆU
--- ================================
-SELECT * FROM developers;
-SELECT * FROM client_ownership;
-SELECT * FROM oauth2_registered_client;
-SELECT * FROM oauth2_authorization_codes;
-SELECT * FROM oauth2_refresh_tokens;
-SELECT * FROM users;
-SELECT * FROM user_face_data;
+-- Comments cho oauth2_clients
+COMMENT ON TABLE oauth2_clients IS 'Lưu trữ thông tin các OAuth2 clients';
+COMMENT ON COLUMN oauth2_clients.client_id IS 'Mã định danh duy nhất của client';
+COMMENT ON COLUMN oauth2_clients.grant_types IS 'Các loại grant types được phân cách bởi dấu +';
+COMMENT ON COLUMN oauth2_clients.scopes IS 'Các scopes được phân cách bởi dấu +';
+
+-- =====================================================
+-- TABLE: oauth2_client_members
+-- =====================================================
+CREATE TABLE IF NOT EXISTS oauth2_client_members (
+    id BIGSERIAL PRIMARY KEY,
+    client_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    added_by UUID,
+    
+    -- Foreign Keys
+    CONSTRAINT fk_member_client 
+        FOREIGN KEY (client_id) 
+        REFERENCES oauth2_clients(id) 
+        ON DELETE CASCADE,
+    
+    CONSTRAINT fk_member_user 
+        FOREIGN KEY (user_id) 
+        REFERENCES users(id) 
+        ON DELETE CASCADE,
+    
+    CONSTRAINT fk_member_added_by 
+        FOREIGN KEY (added_by) 
+        REFERENCES users(id) 
+        ON DELETE SET NULL,
+    
+    -- Unique Constraint: 1 user không được thêm 2 lần vào cùng 1 client
+    CONSTRAINT uk_client_user UNIQUE (client_id, user_id)
+);
+
+-- Indexes cho oauth2_client_members (tên unique)
+CREATE INDEX IF NOT EXISTS idx_members_client_id ON oauth2_client_members(client_id);
+CREATE INDEX IF NOT EXISTS idx_members_user_id ON oauth2_client_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_members_is_active ON oauth2_client_members(is_active);
+CREATE INDEX IF NOT EXISTS idx_members_added_by ON oauth2_client_members(added_by);
+
+-- Composite index cho query phổ biến
+CREATE INDEX IF NOT EXISTS idx_members_client_user_active 
+    ON oauth2_client_members(client_id, user_id, is_active);
+
+-- Comments
+COMMENT ON TABLE oauth2_client_members IS 'Bảng quản lý members của OAuth2 clients';
+COMMENT ON COLUMN oauth2_client_members.role IS 'Vai trò của member trong client (OWNER, ADMIN, DEVELOPER, VIEWER)';
+COMMENT ON COLUMN oauth2_client_members.is_active IS 'Trạng thái active của member';
+COMMENT ON COLUMN oauth2_client_members.added_by IS 'User ID của người thêm member này';
+
+-- =====================================================
+-- TABLE: oauth2_client_secrets
+-- =====================================================
+CREATE TABLE IF NOT EXISTS oauth2_client_secrets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL,
+    secret_hash TEXT NOT NULL,
+    secret_hint VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_by UUID,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMP,
+    revoked_by UUID,
+    
+    -- Foreign Keys
+    CONSTRAINT fk_secret_client 
+        FOREIGN KEY (client_id) 
+        REFERENCES oauth2_clients(id) 
+        ON DELETE CASCADE,
+    
+    CONSTRAINT fk_secret_created_by 
+        FOREIGN KEY (created_by) 
+        REFERENCES users(id) 
+        ON DELETE SET NULL,
+    
+    CONSTRAINT fk_secret_revoked_by 
+        FOREIGN KEY (revoked_by) 
+        REFERENCES users(id) 
+        ON DELETE SET NULL,
+    
+    -- Check constraint
+    CONSTRAINT chk_revoked_logic 
+        CHECK (
+			-- Cho phép Thêm lúc ban đầu khi chưa từng bị revoke cả đều 2 null
+			-- Hoặc đã từng bị revoke (revoked_at not null) nhưng user revoked đã bị xóa (revoked_by is null)
+			-- Hoặc trường hợp revoke nhưng user chua xóa cả 2 đều not null
+            NOT (revoked_at IS NULL AND revoked_by IS NOT NULL)
+        ),
+	-- Check constraint 2: Active status consistency
+    CONSTRAINT chk_active_revoked_logic
+        CHECK (
+            (is_active = true AND revoked_at IS NULL) OR
+            (is_active = false AND revoked_at IS NOT NULL)
+        )
+);
+
+-- Indexes cho oauth2_client_secrets
+CREATE INDEX IF NOT EXISTS idx_secrets_client_id ON oauth2_client_secrets(client_id);
+CREATE INDEX IF NOT EXISTS idx_secrets_is_active ON oauth2_client_secrets(is_active);
+CREATE INDEX IF NOT EXISTS idx_secrets_created_by ON oauth2_client_secrets(created_by);
+
+-- Comments
+COMMENT ON TABLE oauth2_client_secrets IS 'Lưu trữ client secrets cho OAuth2 clients';
+COMMENT ON COLUMN oauth2_client_secrets.id IS 'UUID của secret record';
+COMMENT ON COLUMN oauth2_client_secrets.secret_hash IS 'Hash của secret';
+COMMENT ON COLUMN oauth2_client_secrets.secret_hint IS 'Gợi ý về secret (VD: ***xyzt)';
+
+-- =====================================================
+-- TRIGGER: Auto update updated_at cho users
+-- =====================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- INSERT SAMPLE DATA (Optional - for testing)
+-- =====================================================
+-- Insert admin user
+INSERT INTO users (username, name, email, helper_data, key_hash, role, is_active)
+VALUES 
+    ('admin', 'System Admin', 'admin@example.com', '{}', 'hash123', 'ADMIN', true)
+ON CONFLICT (username) DO NOTHING;
+
+-- Verify tables created
+SELECT 
+    table_name, 
+    pg_size_pretty(pg_total_relation_size(quote_ident(table_name))) AS size
+FROM information_schema.tables
+WHERE table_schema = 'auth_service'
+ORDER BY table_name;

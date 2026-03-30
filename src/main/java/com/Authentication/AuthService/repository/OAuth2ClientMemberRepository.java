@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import com.Authentication.AuthService.dto.Client.ClientIdDto;
+import com.Authentication.AuthService.dto.client.ClientIdDto;
 import com.Authentication.AuthService.entity.OAuth2ClientMember;
 
 @Repository

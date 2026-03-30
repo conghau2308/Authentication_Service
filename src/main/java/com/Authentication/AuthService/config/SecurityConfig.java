@@ -13,9 +13,12 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import com.Authentication.AuthService.filter.JwtAuthFilter;
 
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
+        private final JwtAuthFilter jwtAuthFilter; // ✅ Inject filter vào
 
         @Bean
         public PasswordEncoder passwordEncoder() {
@@ -49,43 +53,42 @@ public class SecurityConfig {
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
                 http
                                 .authorizeHttpRequests(authorize -> authorize
-
                                                 .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.INCLUDE)
                                                 .permitAll()
 
                                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                                                // Public endpoints
-                                                .requestMatchers("/.well-known/**").permitAll()
-                                                .requestMatchers("/auth/**").permitAll()
-                                                .requestMatchers("/oauth2/**").permitAll()
-                                                .requestMatchers("/face-login").permitAll()
-                                                .requestMatchers("/portal/login", "/portal/register").permitAll()
-                                                .requestMatchers("/portal/demo-login").permitAll()
-                                                .requestMatchers("/demo/**").permitAll()
-                                                .requestMatchers("/error").permitAll()
+                                                // ── Swagger ──────────────────────────────────────────
                                                 .requestMatchers(
                                                                 "/swagger-ui/**",
                                                                 "/v3/api-docs/**",
                                                                 "/swagger-ui.html")
                                                 .permitAll()
 
-                                                // Static
+                                                // ── Static assets ─────────────────────────────────────
                                                 .requestMatchers("/css/**", "/js/**", "/images/**", "/favicon.ico")
                                                 .permitAll()
 
-                                                // Protected
-                                                .requestMatchers("/portal/api/v1/enroll/**").authenticated()
+                                                // ── Well-known / error ────────────────────────────────
+                                                .requestMatchers("/.well-known/**", "/error").permitAll()
 
+                                                // ── Auth endpoints — CHỈ public những gì cần thiết ───
+                                                .requestMatchers(HttpMethod.POST, "/auth/enroll").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/auth/verify").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/auth/check-username").permitAll()
+                                                // /auth/refresh và /auth/logout → cần token → KHÔNG permitAll
+
+                                                // ── OAuth2 / portal public ────────────────────────────
+                                                .requestMatchers(HttpMethod.GET, "/oauth2/validate").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/oauth2/userinfo").permitAll()
+
+                                                // ── Tất cả còn lại → phải authenticated ──────────────
                                                 .anyRequest().authenticated())
 
-                                // 🔥 Stateless vì dùng JWT
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                                // 🔥 Custom JWT filter của bạn
-                               
-
+                                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                                 .cors(Customizer.withDefaults())
                                 .csrf(AbstractHttpConfigurer::disable);
 

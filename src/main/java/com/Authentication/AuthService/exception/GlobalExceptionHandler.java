@@ -9,10 +9,13 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import com.Authentication.AuthService.dto.Response.ApiResponse;
+import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.exception.business.PythonApisException;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -40,6 +43,7 @@ public class GlobalExceptionHandler {
     // Xử lý lỗi chung chung
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleSystemExceptions(Exception exception) {
+        log.error("System exception caught", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 ApiResponse.<Object>builder()
                         .success(false)

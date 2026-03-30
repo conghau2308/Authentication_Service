@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.Auth;
+package com.Authentication.AuthService.dto.auth;
 
 import java.time.Instant;
 

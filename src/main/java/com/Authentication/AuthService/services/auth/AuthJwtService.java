@@ -14,8 +14,9 @@ import org.springframework.stereotype.Service;
 
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.config.JwtSecretConfig;
-import com.Authentication.AuthService.dto.Jwts.AccessTokenClaims;
-import com.Authentication.AuthService.dto.Jwts.RefreshTokenClaims;
+import com.Authentication.AuthService.dto.jwts.AccessTokenClaims;
+import com.Authentication.AuthService.dto.jwts.RefreshTokenClaims;
+import com.Authentication.AuthService.exception.business.BusinessException;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -53,6 +54,8 @@ public class AuthJwtService {
     }
 
     public String generateAccessToken(String userId, String email, String name) {
+        log.debug("Generating access token for userId={}, email={}", userId, email);
+        log.debug("Token max age (raw): {}", cookieConfig.getAccessTokenMaxAge());
 
         AccessTokenClaims claims = AccessTokenClaims.builder()
                 .type(TOKEN_TYPE_ACCESS)
@@ -60,6 +63,8 @@ public class AuthJwtService {
                 .email(email)
                 .name(name)
                 .build();
+
+        log.debug("Claims map: {}", claims.toClaimsMap()); // xem map có gì
         return createToken(claims.toClaimsMap(), userId, cookieConfig.getAccessTokenMaxAge() * 1000);
     }
 
@@ -81,19 +86,23 @@ public class AuthJwtService {
     }
 
     private String createToken(Map<String, Object> claims, String subject, long expirationMillis) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expirationMillis);
+        try {
+            Date now = new Date();
+            Date expiryDate = new Date(now.getTime() + expirationMillis);
 
-        String jti = (String) claims.get("jti");
+            // String jti = (String) claims.get("jti");
 
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(subject)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .setId(jti)
-                .signWith(signingKey, SignatureAlgorithm.HS256)
-                .compact();
+            return Jwts.builder()
+                    .setSubject(subject)
+                    .setIssuedAt(now)
+                    .setExpiration(expiryDate)
+                    .addClaims(claims)
+                    .signWith(signingKey, SignatureAlgorithm.HS256)
+                    .compact();
+        } catch (Exception e) {
+            log.error("Failed to create token for subject {}: {}", subject, e.getMessage(), e);
+            throw new RuntimeException("Failed to create JWT token", e);
+        }
     }
 
     private Claims parseToken(String token) {

@@ -9,7 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.Authentication.AuthService.config.CookieConfig;
-import com.Authentication.AuthService.dto.OAuth.AccessTokenData;
+import com.Authentication.AuthService.dto.oauth.AccessTokenData;
 import com.Authentication.AuthService.enums.RedisKeyPrefix;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.services.token.TokenCryptoService;

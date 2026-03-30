@@ -11,7 +11,7 @@ import org.springframework.util.StringUtils;
 
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.TokenResponseDto;
-import com.Authentication.AuthService.dto.OAuth.AuthorizationCodeData;
+import com.Authentication.AuthService.dto.oauth.AuthorizationCodeData;
 import com.Authentication.AuthService.exception.business.BusinessException;
 
 import lombok.RequiredArgsConstructor;

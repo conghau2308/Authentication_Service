@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.Client;
+package com.Authentication.AuthService.dto.client;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

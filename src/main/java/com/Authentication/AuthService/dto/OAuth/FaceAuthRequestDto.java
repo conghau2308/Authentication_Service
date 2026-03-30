@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.OAuth;
+package com.Authentication.AuthService.dto.oauth;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;

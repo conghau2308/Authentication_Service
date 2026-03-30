@@ -15,9 +15,9 @@ import org.springframework.stereotype.Service;
 
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.config.JwtSecretConfig;
-import com.Authentication.AuthService.dto.OAuth.Jwts.OauthAccessTokenClaims;
-import com.Authentication.AuthService.dto.OAuth.Jwts.OauthIdTokenClaims;
-import com.Authentication.AuthService.dto.OAuth.Jwts.OauthRefreshTokenClaims;
+import com.Authentication.AuthService.dto.oauth.Jwts.OauthAccessTokenClaims;
+import com.Authentication.AuthService.dto.oauth.Jwts.OauthIdTokenClaims;
+import com.Authentication.AuthService.dto.oauth.Jwts.OauthRefreshTokenClaims;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.UserRepository;

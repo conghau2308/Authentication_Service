@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.Authentication.AuthService.dto.OAuth.UserInforResponseDto;
+import com.Authentication.AuthService.dto.oauth.UserInforResponseDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.UserRepository;

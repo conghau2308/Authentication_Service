@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.OAuth;
+package com.Authentication.AuthService.dto.oauth;
 
 import lombok.Builder;
 import lombok.Data;

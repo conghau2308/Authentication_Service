@@ -11,7 +11,8 @@ import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
 import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
-import com.Authentication.AuthService.dto.Auth.RefreshTokenData;
+import com.Authentication.AuthService.dto.auth.RefreshTokenData;
+import com.Authentication.AuthService.dto.user.UserInforResponseDto;
 import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
@@ -24,8 +25,10 @@ import com.Authentication.AuthService.services.cookies.CookiesService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class UserEnrollService {
     private final UserRepository userRepository;
@@ -66,7 +69,8 @@ public class UserEnrollService {
         userRepository.save(user);
     }
 
-    public void verify(UserVerifyRequestDto request, HttpServletResponse response) {
+    @Transactional
+    public String verify(UserVerifyRequestDto request, HttpServletResponse response) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User chưa đăng ký tài khoản."));
 
@@ -86,11 +90,11 @@ public class UserEnrollService {
 
             // Tạo access Token
             String accessToken = authJwtService.generateAccessToken(
-                    user.getUsername(),
+                    user.getId().toString(),
                     user.getEmail(),
                     user.getName());
             // Tạo refresh token
-            String refreshToken = authJwtService.generateRefreshToken(user.getUsername());
+            String refreshToken = authJwtService.generateRefreshToken(user.getId().toString());
 
             // Lưu refresh token mới
             RefreshTokenData refreshtokensaved = RefreshTokenData.builder()
@@ -102,6 +106,8 @@ public class UserEnrollService {
 
             // Set cookie http-only cho access token vaf refresh token
             cookiesService.setSecureAllCookies(response, accessToken, refreshToken);
+
+            return accessToken;
         } else {
             throw new BusinessException("VERIFY_FAILED", "Xác thực không thành công. Vui lòng thử lại.");
         }

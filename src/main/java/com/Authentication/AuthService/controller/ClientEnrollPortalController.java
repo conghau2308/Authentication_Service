@@ -14,12 +14,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.Authentication.AuthService.dto.Client.ClientEnrollResponseDto;
-import com.Authentication.AuthService.dto.Client.ClientCredentialsResponseDto;
-import com.Authentication.AuthService.dto.Client.ClientEnrollRequestDto;
-import com.Authentication.AuthService.dto.Client.ClientIdDto;
-import com.Authentication.AuthService.dto.Client.ClientSecretResponseDto;
-import com.Authentication.AuthService.dto.Response.ApiResponse;
+import com.Authentication.AuthService.dto.client.ClientCredentialsResponseDto;
+import com.Authentication.AuthService.dto.client.ClientEnrollRequestDto;
+import com.Authentication.AuthService.dto.client.ClientEnrollResponseDto;
+import com.Authentication.AuthService.dto.client.ClientIdDto;
+import com.Authentication.AuthService.dto.client.ClientSecretResponseDto;
+import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.services.enrollment.ClientManagementService;
 

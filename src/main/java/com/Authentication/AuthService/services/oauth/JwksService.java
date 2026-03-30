@@ -7,8 +7,8 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import com.Authentication.AuthService.dto.Jwks.JwksDto;
-import com.Authentication.AuthService.dto.Jwks.JwksResponseDto;
+import com.Authentication.AuthService.dto.jwks.JwksDto;
+import com.Authentication.AuthService.dto.jwks.JwksResponseDto;
 import com.Authentication.AuthService.services.auth.crypto.RsaKeyManagerService;
 
 import lombok.RequiredArgsConstructor;

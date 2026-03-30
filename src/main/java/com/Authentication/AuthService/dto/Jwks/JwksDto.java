@@ -1,4 +1,4 @@
-package com.Authentication.AuthService.dto.Jwks;
+package com.Authentication.AuthService.dto.jwks;
 
 import lombok.Builder;
 import lombok.Data;
