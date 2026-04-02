@@ -7,16 +7,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import com.Authentication.AuthService.config.CookieConfig;
-import com.Authentication.AuthService.dto.AuthenticateRequestDto;
 import com.Authentication.AuthService.dto.OAuth2ValidateClientResponseDto;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
-import com.Authentication.AuthService.dto.oauth.CheckSSORequestDto;
-import com.Authentication.AuthService.dto.oauth.FaceAuthRequestDto;
-import com.Authentication.AuthService.dto.oauth.SSOAuthorizeRequestDto;
-import com.Authentication.AuthService.dto.oauth.SSOStatusResponseDto;
+import com.Authentication.AuthService.dto.oauth.AuthorizeRequestDto;
+import com.Authentication.AuthService.dto.oauth.AuthorizeResponseDto;
+import com.Authentication.AuthService.dto.oauth.ConsentRequestDto;
 import com.Authentication.AuthService.dto.oauth.UserInforResponseDto;
-import com.Authentication.AuthService.dto.oauth.ValidateOAuthResponseDto;
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.services.oauth.AuthenticationService;
@@ -61,43 +58,20 @@ public class OAuth2AuthentizationController {
         return ResponseEntity.ok(ApiResponse.success(result, "Các tham số là hợp lệ."));
     }
 
-    /**
-     * API 2: Authenticate user với face recognition
-     * Frontend gọi API này sau khi user nhập username và chụp ảnh
-     */
-    // Cần chú ý xem có cần tạo redirect error&errorDescription cho client không
     @PostMapping("/authorize")
-    public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authenticate(
-            @RequestBody AuthenticateRequestDto request,
-            @AuthenticationPrincipal User user,
-            HttpServletResponse httpResponse) {
-        ValidateOAuthResponseDto result = authenticationService.validateLogin(request, user, httpResponse);
-
-        return ResponseEntity.ok(ApiResponse.success(result, "Xác thực thành công."));
-    }
-
-    @PostMapping("/check-session")
-    public ResponseEntity<ApiResponse<SSOStatusResponseDto>> checkSSOStatus(
-            @RequestBody CheckSSORequestDto request,
+    public ResponseEntity<ApiResponse<AuthorizeResponseDto>> authorize(
+            @RequestBody AuthorizeRequestDto request,
             @AuthenticationPrincipal User user) {
-        SSOStatusResponseDto result = authenticationService.checkSSOStatus(request, user);
-        return ResponseEntity.ok(ApiResponse.success(result, "KIểm tra session thành công."));
+        AuthorizeResponseDto result = authenticationService.authorize(request, user);
+        return ResponseEntity.ok(ApiResponse.success(result, "Authorize thành công."));
     }
 
-    @PostMapping("/authorize/face-auth")
-    public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authenticateWithFace(
-            @RequestBody FaceAuthRequestDto request, HttpServletResponse response) {
-        ValidateOAuthResponseDto result = authenticationService.authenticateWithFace(request, response);
-        return ResponseEntity.ok(ApiResponse.success(result, "Xác thực khuôn mặt thành công."));
-    }
-
-    @PostMapping("authorize/sso")
-    public ResponseEntity<ApiResponse<ValidateOAuthResponseDto>> authorizeWithSSO(
-            @RequestBody SSOAuthorizeRequestDto request,
-            @AuthenticationPrincipal User user,
-            HttpServletResponse response) {
-        ValidateOAuthResponseDto result = authenticationService.authorizeWithSSO(request, user, response);
-        return ResponseEntity.ok(ApiResponse.success(result, "Xác thực SSO thành công."));
+    @PostMapping("/authorize/consent")
+    public ResponseEntity<ApiResponse<AuthorizeResponseDto>> confirmConsent(
+            @RequestBody ConsentRequestDto request,
+            @AuthenticationPrincipal User user) {
+        AuthorizeResponseDto result = authenticationService.confirmConsent(request, user);
+        return ResponseEntity.ok(ApiResponse.success(result, "Xác nhận consent thành công."));
     }
 
     /**

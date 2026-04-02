@@ -2,34 +2,33 @@ package com.Authentication.AuthService.services.oauth;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import com.Authentication.AuthService.dto.AuthenticateRequestDto;
 import com.Authentication.AuthService.dto.OAuth2ValidateClientResponseDto;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
 import com.Authentication.AuthService.dto.TokenResponseDto;
-import com.Authentication.AuthService.dto.oauth.CheckSSORequestDto;
-import com.Authentication.AuthService.dto.oauth.FaceAuthRequestDto;
-import com.Authentication.AuthService.dto.oauth.SSOAuthorizeRequestDto;
-import com.Authentication.AuthService.dto.oauth.SSOStatusResponseDto;
-import com.Authentication.AuthService.dto.oauth.ValidateOAuthResponseDto;
+import com.Authentication.AuthService.dto.oauth.AuthorizeRequestDto;
+import com.Authentication.AuthService.dto.oauth.AuthorizeResponseDto;
+import com.Authentication.AuthService.dto.oauth.ConsentRequestDto;
 import com.Authentication.AuthService.entity.OAuth2Client;
 import com.Authentication.AuthService.entity.OAuth2ClientSecret;
+import com.Authentication.AuthService.entity.OAuth2UserConsent;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.OAuth2ClientRepository;
 import com.Authentication.AuthService.repository.OAuth2ClientSecretRepository;
-import com.Authentication.AuthService.repository.UserRepository;
-import com.Authentication.AuthService.services.auth.AuthJwtService;
-import com.Authentication.AuthService.services.auth.FaceAuthService;
+import com.Authentication.AuthService.repository.OAuth2UserConsentRepository;
 import com.Authentication.AuthService.services.cookies.CookiesService;
 
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -38,16 +37,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AuthenticationService {
     private final OAuth2ClientRepository registeredClientRepository;
-    private final AuthJwtService authJwtService;
-    private final UserRepository userRepository;
-    private final FaceAuthService faceAuthService;
     private final CookiesService cookiesService;
     private final AuthorizationCodeService authorizationCodeService;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final OAuth2ClientSecretRepository clientSecretRepository;
+    private final OAuth2UserConsentRepository userConsentRepository;
 
+    @Transactional
     public OAuth2ValidateClientResponseDto validateParams(String clientId, String redirectUri, String scope,
             String responseType, String state,
             String nonce, String codeChallenge, String codeChallengeMethod) {
@@ -63,10 +61,6 @@ public class AuthenticationService {
             throw new BusinessException("UNSUPPORTED_RESPONSE_TYPE", "Chỉ hỗ trợ response_type=code.");
         }
 
-        // Chú ý hiện tại vẫn đang dùng thư viện Authentcation của java chứ chưa dùng
-        // Entity
-        // Do đó cần kiểm tra xem có phù hợp với nghiệp vụ không và cân nhắc chuyển sang
-        // Entity
         OAuth2Client client = registeredClientRepository.findByClientId(clientId);
 
         if (client == null) {
@@ -79,7 +73,7 @@ public class AuthenticationService {
             throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
         }
 
-        String[] requestedScopes = scope.split("\\+");
+        String[] requestedScopes = scope.trim().split("[\\s+]+");
         for (String requestedScope : requestedScopes) {
             if (!client.getScopes().contains(requestedScope)) {
                 log.error("scope khong hop le: {}", requestedScope);
@@ -107,163 +101,99 @@ public class AuthenticationService {
             throw new BusinessException("NONCE_MISSED", "Nonce là bắt buộc cho OpenID Connect (OIDC).");
         }
 
-        return OAuth2ValidateClientResponseDto.builder().clientName(client.getClientName()).scopes(requestedScopes)
+        return OAuth2ValidateClientResponseDto.builder().clientName(client.getClientName()).clientIcon("chua co")
+                .clientHomepageUrl("chua co").scopes(requestedScopes)
                 .build();
     }
 
-    public ValidateOAuthResponseDto validateLogin(AuthenticateRequestDto request, User user,
-            HttpServletResponse response) {
-        // Kiểm tra 1 lần nữa client và redirect_uri
-        OAuth2Client client = registeredClientRepository.findByClientId(request.getClientId());
-
-        if (client == null) {
+    @Transactional
+    public AuthorizeResponseDto authorize(AuthorizeRequestDto request, User user) {
+        OAuth2Client client = registeredClientRepository.findByClientId(request.getClient_id());
+        if (client == null)
             throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
+        if (!client.getRedirectUri().contains(request.getRedirect_uri()))
+            throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không hợp lệ.");
+
+        Optional<OAuth2UserConsent> consentOpt = userConsentRepository.findByUserIdAndClientId(user.getId(),
+                client.getId());
+
+        // Case 1: đã có consent VÀ scope khớp → tạo authCode luôn
+        if (consentOpt.isPresent() && consentOpt.get().getGrantedScopes().equals(request.getScope())) {
+            return buildRedirectResponse(request, user, client);
         }
 
-        if (!client.getRedirectUri().contains(request.getRedirectUri())) {
-            throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
-        }
-
-        String username = null;
-        boolean ssoUsed = false;
-
-        // Vì trong 1 domain + path chỉ có 1 cookie (name) nên request sẽ chỉ gửi 1 jwt
-        // chứa username
-        // Chú ý việc quản lý nhiều account
-
-        // Kiêm tra SSO
-        if (user.getUsername().equals(request.getUsername())) {
-            username = user.getUsername();
-            ssoUsed = true;
-        } else
-            throw new BusinessException("USERNAME_DIFFERENT",
-                    "Username của request khác username của Access token.",
-                    HttpStatus.UNAUTHORIZED);
-
-        // Khi không có accessToken cookie thì phải đăng nhập face authenticate (nhận
-        // accessToken = null trong request)
-        if (username == null) {
-            if (!StringUtils.hasText(request.getUsername())) {
-                throw new BusinessException("INVALID_REQUEST", "Username không được để trống.");
-            }
-
-            if (!StringUtils.hasText(request.getImage_b64())) {
-                throw new BusinessException("INVALID_REQUEST", "Vui lòng gửi ảnh chụp khuôn mặt.");
-            }
-
-            // User user = userRepository.findByUsername(request.getUsername())
-            // .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy
-            // user.",
-            // HttpStatus.UNAUTHORIZED));
-            if (user.getKeyHash() == null || user.getHelperData() == null) {
-                throw new BusinessException("BIOMETRIC_NOT_FOUND", "User chưa đăng ký sinh trắc học.",
-                        HttpStatus.UNAUTHORIZED);
-            }
-
-            boolean result = faceAuthService.verifyUser(request.getUsername(),
-            request.getImage_b64(),
-            user.getHelperData(), user.getKeyHash());
-
-            if (!result) {
-                throw new BusinessException("ACCESS_DENIED", "Khuôn mặt không khớp. Vui lòng đăng nhập lại.",
-                        HttpStatus.UNAUTHORIZED);
-            }
-
-            // Tạo các cookie
-            username = request.getUsername();
-            String accessTokenNew = authJwtService.generateAccessToken(username, user.getEmail(), user.getName());
-            String refreshTokenNew = authJwtService.generateRefreshToken(username);
-
-            cookiesService.setSecureAllCookies(response, accessTokenNew, refreshTokenNew);
-        }
-
-        // Tạo auth code cho client
-        String authCode = authorizationCodeService.generateAuthorizationCode(request.getClientId(), username,
-                request.getRedirectUri(), request.getScope(), request.getState(), request.getNonce(),
-                request.getCodeChallenge(), request.getCodeChallengeMethod());
-        String redirectUrl = buildSuccessRedirectUrl(request.getRedirectUri(), authCode, request.getState());
-
-        return ValidateOAuthResponseDto.builder().redirect_url(redirectUrl).sso_used(ssoUsed).build();
-    }
-
-    public SSOStatusResponseDto checkSSOStatus(CheckSSORequestDto request, User user) {
-        boolean usernameMatch = request.getUsername() != null && user.getUsername().equals(request.getUsername());
-
-        return SSOStatusResponseDto.builder()
-                .ssoAvailable(usernameMatch)
-                .username(usernameMatch ? request.getUsername() : null)
-                .usernameMatch(usernameMatch)
+        // Case 2: chưa có consent HOẶC scope thay đổi → yêu cầu consent
+        List<String> pendingScopes = Arrays.asList(request.getScope().trim().split("[\\s+]+"));
+        return AuthorizeResponseDto.builder()
+                .consent_required(true)
+                .pending_scopes(pendingScopes)
+                .client_name(client.getClientName())
                 .build();
     }
 
-    public ValidateOAuthResponseDto authenticateWithFace(FaceAuthRequestDto request, HttpServletResponse response) {
-        validateClient(request.getClientId(), request.getRedirectUri());
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tìm thấy user từ cookie.",
-                        HttpStatus.UNAUTHORIZED));
-        if (user.getKeyHash() == null || user.getHelperData() == null) {
-            throw new BusinessException("BIOMETRIC_NOT_FOUND",
-                    "User chưa đăng ký sinh trắc học.", HttpStatus.UNAUTHORIZED);
-        }
-        // boolean faceMatched = faceAuthService.verifyUser(request.getUsername(),
-        // request.getImage_b64(),
-        // user.getHelperData(), user.getKeyHash());
-        boolean faceMatched = true;
-        if (!faceMatched) {
-            throw new BusinessException("ACCESS_DENIED", "Khuôn mặt không khớp.",
-                    HttpStatus.UNAUTHORIZED);
-        }
-        String accessToken = authJwtService.generateAccessToken(user.getUsername(), user.getEmail(), user.getName());
-        String refreshToken = authJwtService.generateRefreshToken(user.getUsername());
-        cookiesService.setSecureAllCookies(response, accessToken, refreshToken);
-
-        String authCode = authorizationCodeService.generateAuthorizationCode(
-                request.getClientId(), user.getUsername(), request.getRedirectUri(),
-                request.getScope(), request.getState(), request.getNonce(),
-                request.getCodeChallenge(), request.getCodeChallengeMethod());
-        String redirectUrl = buildSuccessRedirectUrl(request.getRedirectUri(), authCode, request.getState());
-
-        return ValidateOAuthResponseDto.builder()
-                .redirect_url(redirectUrl)
-                .sso_used(false)
-                .build();
-    }
-
-    public ValidateOAuthResponseDto authorizeWithSSO(SSOAuthorizeRequestDto request, User user,
-            HttpServletResponse response) {
-        validateClient(request.getClientId(), request.getRedirectUri());
-
-        if (!user.getUsername().equals(request.getUsername())) {
-            throw new BusinessException("USERNAME_MISMATCH",
-                    "Username không khớp với session.", HttpStatus.UNAUTHORIZED);
-        }
-
-        String authCode = authorizationCodeService.generateAuthorizationCode(
-                request.getClientId(), user.getId().toString(), request.getRedirectUri(),
-                request.getScope(), request.getState(), request.getNonce(),
-                request.getCodeChallenge(), request.getCodeChallengeMethod());
-
-        String redirectUrl = buildSuccessRedirectUrl(
-                request.getRedirectUri(), authCode, request.getState());
-
-        return ValidateOAuthResponseDto.builder()
-                .redirect_url(redirectUrl)
-                .sso_used(true)
-                .build();
-    }
-
-    private void validateClient(String clientId, String redirectUri) {
-        OAuth2Client client = registeredClientRepository.findByClientId(clientId);
-
-        if (client == null) {
+    @Transactional
+    public AuthorizeResponseDto confirmConsent(ConsentRequestDto request, User user) {
+        OAuth2Client client = registeredClientRepository.findByClientId(request.getClient_id());
+        if (client == null)
             throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.");
+
+        // Upsert consent
+        Optional<OAuth2UserConsent> consentOpt = userConsentRepository.findByUserIdAndClientId(user.getId(),
+                client.getId());
+
+        if (consentOpt.isPresent()) {
+            // Cập nhật scope mới
+            consentOpt.get().setGrantedScopes(request.getScope());
+            userConsentRepository.save(consentOpt.get());
+        } else {
+            // Tạo mới
+            userConsentRepository.save(OAuth2UserConsent.builder()
+                    .user(user)
+                    .client(client)
+                    .grantedScopes(request.getScope())
+                    .build());
         }
 
-        if (!client.getRedirectUri().contains(redirectUri)) {
-            throw new BusinessException("INVALID_REDIRECT_URI", "Redirect uri không được đăng ký cho Client này.");
-        }
+        // Tạo authCode và trả redirect_url
+        String authCode = authorizationCodeService.generateAuthorizationCode(
+                request.getClient_id(),
+                user.getId().toString(),
+                request.getRedirect_uri(),
+                request.getScope(),
+                request.getState(),
+                request.getNonce(),
+                request.getCode_challenge(),
+                request.getCode_challenge_method());
+
+        String redirectUrl = buildSuccessRedirectUrl(request.getRedirect_uri(), authCode, request.getState());
+
+        return AuthorizeResponseDto.builder()
+                .redirect_url(redirectUrl)
+                .consent_required(false)
+                .build();
     }
 
+    // Trích ra helper để tránh duplicate code
+    private AuthorizeResponseDto buildRedirectResponse(AuthorizeRequestDto request, User user, OAuth2Client client) {
+        String authCode = authorizationCodeService.generateAuthorizationCode(
+                request.getClient_id(),
+                user.getId().toString(),
+                request.getRedirect_uri(),
+                request.getScope(),
+                request.getState(),
+                request.getNonce(),
+                request.getCode_challenge(),
+                request.getCode_challenge_method());
+
+        String redirectUrl = buildSuccessRedirectUrl(request.getRedirect_uri(), authCode, request.getState());
+
+        return AuthorizeResponseDto.builder()
+                .redirect_url(redirectUrl)
+                .consent_required(false)
+                .build();
+    }
+
+    @Transactional
     public TokenResponseDto exchangeTokens(String grantType, String clientId, String clientSecret, String code,
             String codeVerifier,
             String state, String redirectUri) {
@@ -316,6 +246,7 @@ public class AuthenticationService {
         return tokenService.handleAuthorizationCodeFlow(clientId, code, redirectUri, state, codeVerifier);
     }
 
+    @Transactional
     public RefreshTokenResponseDto refreshToken(String grantType, String clientId, String clientSecret,
             String refreshToken) {
         if (!"refresh_code".equals(grantType)) {
@@ -361,6 +292,7 @@ public class AuthenticationService {
         return refreshTokenService.rotateEncryptedOpaqueToken(refreshToken, clientId);
     }
 
+    @Transactional
     public void revoke(String token, String tokenTypeHint, String clientId, String clientSecret) {
         // Hiện tại chỉ hỗ trợ revoke theo refresh token, có thể mở rộng để revoke tất
         // cả token cho user nhưng hiện tại mỗi user chỉ có 1 refresh token
@@ -393,6 +325,7 @@ public class AuthenticationService {
         refreshTokenService.revokeRefreshToken(token);
     }
 
+    @Transactional
     public void logout(String refreshToken, HttpServletResponse response) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BusinessException("TOKEN_IS_NULL", "Vui lòng gửi kèm cookies đã cấp.", HttpStatus.UNAUTHORIZED);

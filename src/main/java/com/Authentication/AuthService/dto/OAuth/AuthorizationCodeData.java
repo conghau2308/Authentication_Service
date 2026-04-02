@@ -13,8 +13,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AuthorizationCodeData implements Serializable {
-    private String code;
-
     // User đã đăng nhập
     private String userId;
 

@@ -52,7 +52,15 @@ public class UserEnrollService {
             throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
         }
 
-        UserEnrollResponseDto response = faceAuthService.enrollUser(request.getUsername(), request.getImage_b64());
+        // UserEnrollResponseDto response =
+        // faceAuthService.enrollUser(request.getUsername(), request.getImage_b64());
+
+        // ── FAKE RESPONSE để test ──────────────────────────────
+        UserEnrollResponseDto response = UserEnrollResponseDto.builder()
+                .helper_data_b64("FAKE_HELPER_DATA_" + request.getUsername())
+                .key_hash_b64("FAKE_KEY_HASH_" + request.getUsername())
+                .build();
+        // ───────────────────────────────────────────────────────
 
         if (response == null) {
             throw new BusinessException("ENROLL_FAILED", "Đăng ký khuôn mặt không thành công.");

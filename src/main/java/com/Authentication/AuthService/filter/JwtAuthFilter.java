@@ -21,6 +21,8 @@ import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -34,71 +36,78 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class JwtAuthFilter extends OncePerRequestFilter {
+
     private final CookieConfig cookieConfig;
     private final AuthJwtService authJwtService;
     private final UserRepository userRepository;
-    private final ObjectMapper objectMapper; // inject để viết JSON response
+    private final ObjectMapper objectMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain)
             throws ServletException, IOException {
-        log.debug("Auth header: {}", request.getHeader("Authorization"));
 
         String token = extractTokenFromHeader(request);
-        log.debug("Extracted token: {}", token != null ? "present" : "null");
+        log.debug("Auth header: {}", request.getHeader("Authorization"));
+        log.debug("Extracted token from header: {}", token != null ? "present" : "null");
+
         if (token == null) {
             token = extractTokenFromCookie(request);
+            log.debug("Extracted token from cookie: {}", token != null ? "present" : "null");
         }
 
-        // Không có token → cho đi tiếp, Security sẽ chặn nếu endpoint cần auth
+        // Không có token → cho đi tiếp, Security config sẽ chặn nếu endpoint cần auth
         if (token == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            UUID id = UUID.fromString(authJwtService.extractUserId(token));
+            // Validate token trước — throw ngay nếu expired hoặc invalid
+            Claims claims = authJwtService.validateAndExtractClaims(token);
+            UUID id = UUID.fromString(claims.getSubject());
 
-            if (id != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                // Query DB chỉ sau khi token đã được xác nhận hợp lệ
                 User user = userRepository.findById(id)
                         .orElseThrow(() -> new BusinessException(
                                 "USER_NOT_FOUND",
                                 "Không tìm thấy user trên hệ thống.",
                                 HttpStatus.UNAUTHORIZED));
 
-                if (authJwtService.validateAccessToken(token, id.toString())) {
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            user, null, user.getAuthorities());
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                } else {
-                    // Token không hợp lệ → trả lỗi luôn
-                    writeErrorResponse(response, "INVALID_TOKEN", "Access token không hợp lệ.");
-                    return;
-                }
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(user, null,
+                        user.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                log.debug("Authenticated user: {}", id);
             }
 
+        } catch (ExpiredJwtException e) {
+            log.debug("Token expired: {}", e.getMessage());
+            writeErrorResponse(response, "TOKEN_EXPIRED", "Access token đã hết hạn.", HttpStatus.UNAUTHORIZED);
+            return;
+
         } catch (JwtException | IllegalArgumentException e) {
-            // Token sai format/hết hạn → trả lỗi luôn
-            writeErrorResponse(response, "INVALID_TOKEN", "Access token không hợp lệ.");
+            log.debug("Invalid token: {}", e.getMessage());
+            writeErrorResponse(response, "INVALID_TOKEN", "Access token không hợp lệ.", HttpStatus.UNAUTHORIZED);
             return;
 
         } catch (BusinessException e) {
-            // User không tồn tại
-            writeErrorResponse(response, e.getCode(), e.getMessage());
+            log.debug("Business error in auth filter: {}", e.getMessage());
+            writeErrorResponse(response, e.getCode(), e.getMessage(), HttpStatus.UNAUTHORIZED);
             return;
         }
 
         filterChain.doFilter(request, response);
     }
 
-    // Tách method viết JSON response lỗi
     private void writeErrorResponse(HttpServletResponse response,
             String code,
-            String message) throws IOException {
-        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            String message,
+            HttpStatus status) throws IOException {
+        response.setStatus(status.value());
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
 

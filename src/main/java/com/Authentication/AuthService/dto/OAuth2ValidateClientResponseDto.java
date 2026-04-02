@@ -7,5 +7,7 @@ import lombok.Data;
 @Builder
 public class OAuth2ValidateClientResponseDto {
     private String clientName;
+    private String clientIcon;
+    private String clientHomepageUrl;
     private String[] scopes;
 }

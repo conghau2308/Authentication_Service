@@ -16,7 +16,6 @@ import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.config.JwtSecretConfig;
 import com.Authentication.AuthService.dto.jwts.AccessTokenClaims;
 import com.Authentication.AuthService.dto.jwts.RefreshTokenClaims;
-import com.Authentication.AuthService.exception.business.BusinessException;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -45,7 +44,6 @@ public class AuthJwtService {
 
     private SecretKey initializeSigningKey(String secret) {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-
         if (keyBytes.length < 32) {
             log.warn("Secret key is too short, generating a secure key");
             return Keys.secretKeyFor(SignatureAlgorithm.HS256);
@@ -53,45 +51,85 @@ public class AuthJwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(String userId, String email, String name) {
-        log.debug("Generating access token for userId={}, email={}", userId, email);
-        log.debug("Token max age (raw): {}", cookieConfig.getAccessTokenMaxAge());
+    // ── Generate ──────────────────────────────────────────────
 
+    public String generateAccessToken(String userId, String email, String name) {
         AccessTokenClaims claims = AccessTokenClaims.builder()
                 .type(TOKEN_TYPE_ACCESS)
                 .jti(generateUniqueTokenId(userId))
                 .email(email)
                 .name(name)
                 .build();
-
-        log.debug("Claims map: {}", claims.toClaimsMap()); // xem map có gì
-        return createToken(claims.toClaimsMap(), userId, cookieConfig.getAccessTokenMaxAge() * 1000);
+        return createToken(claims.toClaimsMap(), userId, cookieConfig.getAccessTokenMaxAge() * 1000L);
     }
 
     public String generateRefreshToken(String userId) {
-
         RefreshTokenClaims claims = RefreshTokenClaims.builder()
                 .type(TOKEN_TYPE_REFRESH)
                 .jti(generateUniqueTokenId(userId))
                 .build();
-        return createToken(claims.toClaimsMap(), userId, cookieConfig.getRefreshTokenMaxAge() * 1000);
+        return createToken(claims.toClaimsMap(), userId, cookieConfig.getRefreshTokenMaxAge() * 1000L);
     }
 
-    private String generateUniqueTokenId(String userId) {
-        String uuid = UUID.randomUUID().toString();
-        Long nanoTime = System.nanoTime();
-        int userIdHash = userId.hashCode();
+    // ── Validate ──────────────────────────────────────────────
 
-        return String.format("%s-%d-%d", uuid, nanoTime, userIdHash);
+    /**
+     * Validate access token và trả về Claims nếu hợp lệ.
+     * Throw ExpiredJwtException nếu hết hạn (để filter phân biệt).
+     * Throw JwtException nếu token sai format/chữ ký.
+     */
+    public Claims validateAndExtractClaims(String token) {
+        // parseToken tự throw ExpiredJwtException hoặc JwtException — không catch ở đây
+        Claims claims = parseToken(token);
+
+        String tokenType = getTokenType(claims);
+        if (!TOKEN_TYPE_ACCESS.equals(tokenType)) {
+            throw new JwtException("Invalid token type: " + tokenType);
+        }
+
+        return claims;
+    }
+
+    /**
+     * Validate refresh token — dùng trong /auth/refresh endpoint.
+     */
+    public boolean validateRefreshToken(String token) {
+        try {
+            Claims claims = parseToken(token);
+            return TOKEN_TYPE_REFRESH.equals(getTokenType(claims));
+            // parseToken đã kiểm tra exp rồi, không cần isTokenExpired nữa
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Invalid refresh token: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // ── Extract ───────────────────────────────────────────────
+
+    public String extractUserId(String token) {
+        return parseToken(token).getSubject();
+    }
+
+    public Date extractExpiration(String token) {
+        return parseToken(token).getExpiration();
+    }
+
+    // ── Private helpers ───────────────────────────────────────
+
+    private Claims parseToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(signingKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+        // Tự throw ExpiredJwtException nếu hết hạn
+        // Tự throw JwtException nếu sai chữ ký / format
     }
 
     private String createToken(Map<String, Object> claims, String subject, long expirationMillis) {
         try {
             Date now = new Date();
             Date expiryDate = new Date(now.getTime() + expirationMillis);
-
-            // String jti = (String) claims.get("jti");
-
             return Jwts.builder()
                     .setSubject(subject)
                     .setIssuedAt(now)
@@ -105,56 +143,12 @@ public class AuthJwtService {
         }
     }
 
-    private Claims parseToken(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(signingKey)
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
-    }
-
-    private String getUserId(Claims claims) {
-        return claims.getSubject();
-    }
-
     private String getTokenType(Claims claims) {
         return claims.get("type", String.class);
     }
 
-    private boolean isTokenExpired(Claims claims) {
-        return claims.getExpiration().before(new Date());
-    }
-
-    public boolean validateAccessToken(String token, String userid) {
-        try {
-            Claims claims = parseToken(token);
-
-            return getUserId(claims).equals(userid)
-                    && getTokenType(claims).equals(TOKEN_TYPE_ACCESS)
-                    && !isTokenExpired(claims);
-        } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Invalid access token: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    public boolean validateRefreshToken(String token) {
-        try {
-            Claims claims = parseToken(token);
-
-            return getTokenType(claims).equals(TOKEN_TYPE_REFRESH)
-                    && !isTokenExpired(claims);
-        } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Invalid refresh token: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    public String extractUserId(String token) {
-        return parseToken(token).getSubject();
-    }
-
-    public Date extractExpiration(String token) {
-        return parseToken(token).getExpiration();
+    private String generateUniqueTokenId(String userId) {
+        return String.format("%s-%d-%d",
+                UUID.randomUUID(), System.nanoTime(), userId.hashCode());
     }
 }
