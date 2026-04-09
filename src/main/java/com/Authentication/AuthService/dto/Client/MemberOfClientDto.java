@@ -5,17 +5,16 @@ import java.util.UUID;
 
 import com.Authentication.AuthService.enums.ClientRole;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
 @Data
 @Builder
-@AllArgsConstructor
-public class ClientIdDto {
-    private UUID id;
-    private String clientId;
-    private String clientName;
-    private LocalDateTime createdAt;
+public class MemberOfClientDto {
+    private UUID userId;
+    private String name;
+    private String email;
+    // private String avatar;
     private ClientRole role;
+    private LocalDateTime addedAt;
 }

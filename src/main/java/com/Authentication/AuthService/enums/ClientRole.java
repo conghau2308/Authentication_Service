@@ -17,9 +17,11 @@ public enum ClientRole {
             ClientPermission.VIEW)),
     DEVELOPER("Developer", Set.of(
             ClientPermission.VIEW_SECRETS,
-            ClientPermission.VIEW)),
-    VIEWER("Viewer", Set.of(
+            ClientPermission.MANAGE_SETTINGS,
             ClientPermission.VIEW));
+// Nếu sau này cần audit trail khi hệ thống được phát triển hơn thì sẽ cần thêm phân quyền VIEW cho analyst
+//     VIEWER("Viewer", Set.of(
+//             ClientPermission.VIEW));
     
     private final String roleName;
     private final Set<ClientPermission> permissions;

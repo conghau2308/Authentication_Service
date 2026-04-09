@@ -17,17 +17,19 @@ public interface OAuth2ClientSecretRepository extends JpaRepository<OAuth2Client
     // Tìm tất cả secret theo clientId
     List<OAuth2ClientSecret> findByClientClientId(String clientId);
 
-    Optional<OAuth2ClientSecret> findByIdAndClientClientId(UUID id, String clientId);
+    Optional<OAuth2ClientSecret> findByIdAndClientId(UUID id, UUID client_id);
+
+    List<OAuth2ClientSecret> findByClientIdAndIsActiveTrue(UUID client_id);
 
     List<OAuth2ClientSecret> findByClientClientIdAndIsActiveTrue(String clientId);
 
     @Query("""
             SELECT s FROM OAuth2ClientSecret s
             LEFT JOIN FETCH s.createdBy
-            WHERE s.client.clientId = :clientId
+            WHERE s.client.id = :client_id
             ORDER BY s.createdAt DESC
             """)
-    List<OAuth2ClientSecret> findByClientIdWithCreatedBy(@Param("clientId") String clientId);
+    List<OAuth2ClientSecret> findByClient_idWithCreatedBy(@Param("client_id") UUID client_id);
 
     // Query riêng lấy revokedBy cho secrets bị revoke
     @Query("""

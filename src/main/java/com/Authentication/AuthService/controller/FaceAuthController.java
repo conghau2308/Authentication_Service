@@ -1,6 +1,5 @@
 package com.Authentication.AuthService.controller;
 
-import java.time.Instant;
 import java.util.Arrays;
 
 import org.springframework.http.HttpStatus;
@@ -68,6 +67,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(token, "Xác thực thành công."));
         }
 
+        @SecurityRequirements
         @PostMapping("/refresh")
         public ResponseEntity<ApiResponse<Void>> refreshToken(
                         HttpServletRequest request,
@@ -78,6 +78,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(null, "Refresh token thành công."));
         }
 
+        @SecurityRequirements
         @PostMapping("/logout")
         public ResponseEntity<ApiResponse<Void>> logout(
                         HttpServletRequest request,

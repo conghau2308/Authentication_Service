@@ -131,18 +131,18 @@ public class UserEnrollService {
         }
 
         // Kiểm tra nếu refresh token còn hạn thì không revoke
-        RefreshTokenData refreshTokenOpt = refreshTokenService.getRefreshTokenDataFromRedis(refreshToken);
-        // Chú ý phần isexpired có cần thiết không
-        if (refreshTokenOpt.isRevoked() || refreshTokenOpt.isExpired()) {
-            throw new BusinessException("TOKEN_REVOKED", "Refresh token đã bị thu hồi.", HttpStatus.UNAUTHORIZED);
-        }
+        // RefreshTokenData refreshTokenOpt = refreshTokenService.getRefreshTokenDataFromRedis(refreshToken);
+        // // Chú ý phần isexpired có cần thiết không
+        // if (refreshTokenOpt.isRevoked() || refreshTokenOpt.isExpired()) {
+        //     throw new BusinessException("TOKEN_REVOKED", "Refresh token đã bị thu hồi.", HttpStatus.UNAUTHORIZED);
+        // }
 
         // Tạo access token mới
-        UUID userId = UUID.fromString(refreshTokenOpt.getUserId());
+        UUID userId = UUID.fromString(authJwtService.extractUserId(refreshToken));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Không tùm thấy user phù hợp."));
         if (!user.isActive()) {
-            throw new BusinessException("INVALID_USER", "User đã bị cấm trên hệ thống.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("INVALID_USER", "User đã bị cấm trên hệ thống.", HttpStatus.FORBIDDEN);
         }
         String accessToken = authJwtService.generateAccessToken(user.getId().toString(), user.getEmail(),
                 user.getName());

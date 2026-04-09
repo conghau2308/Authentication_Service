@@ -1,12 +1,12 @@
 package com.Authentication.AuthService.dto.client;
 
-import java.util.UUID;
-
 import lombok.Builder;
 import lombok.Data;
 
 @Data
 @Builder
-public class ClientEnrollResponseDto {
-    private UUID id;
+public class UpdateClientRequestDto {
+    private String clientName;
+
+    private String redirectUri;
 }

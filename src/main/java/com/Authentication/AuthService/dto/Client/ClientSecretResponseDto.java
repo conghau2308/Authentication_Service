@@ -8,8 +8,7 @@ import lombok.Data;
 @Data
 @Builder
 public class ClientSecretResponseDto {
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String secretValue;
     private String secretId;
-    private String createdByUsername;
 }

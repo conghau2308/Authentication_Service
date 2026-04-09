@@ -62,7 +62,7 @@ public class OAuth2ClientSecret {
     private LocalDateTime revokedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "revoke_by")
+    @JoinColumn(name = "revoked_by")
     private User revokedBy;
 
     public boolean isValid() {
