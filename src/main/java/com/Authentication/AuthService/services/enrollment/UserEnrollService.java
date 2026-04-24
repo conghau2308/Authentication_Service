@@ -105,12 +105,12 @@ public class UserEnrollService {
             String refreshToken = authJwtService.generateRefreshToken(user.getId().toString());
 
             // Lưu refresh token mới
-            RefreshTokenData refreshtokensaved = RefreshTokenData.builder()
-                    .userId(user.getId().toString())
-                    .issuedAt(Instant.now())
-                    .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
-                    .build();
-            refreshTokenService.saveRefreshTokenToRedis(refreshToken, refreshtokensaved);
+            // RefreshTokenData refreshtokensaved = RefreshTokenData.builder()
+            //         .userId(user.getId().toString())
+            //         .issuedAt(Instant.now())
+            //         .expiresAt(Instant.now().plusSeconds(cookieConfig.getRefreshTokenMaxAge()))
+            //         .build();
+            // refreshTokenService.saveRefreshTokenToRedis(refreshToken, refreshtokensaved);
 
             // Set cookie http-only cho access token vaf refresh token
             cookiesService.setSecureAllCookies(response, accessToken, refreshToken);

@@ -1,6 +1,7 @@
 package com.Authentication.AuthService.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,9 +21,9 @@ public interface OAuth2ClientMemberRepository extends JpaRepository<OAuth2Client
         @Query("""
                         SELECT new com.Authentication.AuthService.dto.client.ClientIdDto(cm.client.id, cm.client.clientId, cm.client.clientName, cm.client.createdAt, cm.role)
                         FROM OAuth2ClientMember cm
-                        WHERE cm.user.id = :userId
+                        WHERE cm.user.id = :userId AND cm.isActive = true
                         """)
-        List<ClientIdDto> findClientIdDtosByUserId(UUID userId);
+        List<ClientIdDto> findClientIdDtosByUserIdIsActive(UUID userId);
 
         @Query("""
                         SELECT cm
@@ -40,6 +41,10 @@ public interface OAuth2ClientMemberRepository extends JpaRepository<OAuth2Client
                         @Param("userId") UUID userId);
 
         boolean existsByClientIdAndUserId(UUID client_id, UUID userId);
+
+        boolean existsByClientIdAndUserIdAndIsActiveTrue(UUID clientId, UUID userId);
+
+        Optional<OAuth2ClientMember> findByClientIdAndUserId(UUID clientId, UUID userId);
 
         @Query("""
                         SELECT new com.Authentication.AuthService.dto.client.MemberOfClientDto(

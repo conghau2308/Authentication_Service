@@ -23,6 +23,7 @@ import com.Authentication.AuthService.dto.client.ClientIdDto;
 import com.Authentication.AuthService.dto.client.ClientSecretResponseDto;
 import com.Authentication.AuthService.dto.client.MemberOfClientDto;
 import com.Authentication.AuthService.dto.client.UpdateClientRequestDto;
+import com.Authentication.AuthService.dto.client.UpdateMembershipRoleRequestDto;
 import com.Authentication.AuthService.dto.invitation.PendingInvitationDto;
 import com.Authentication.AuthService.dto.invitation.SendInvitationRequestDto;
 import com.Authentication.AuthService.dto.response.ApiResponse;
@@ -114,6 +115,24 @@ public class ClientEnrollPortalController {
                         @PathVariable UUID client_id) {
                 List<MemberOfClientDto> result = clientManagementService.getMembersByClientId(client_id, user);
                 return ResponseEntity.ok(ApiResponse.success(result, "Lấy danh sách các thành viên thành công."));
+        }
+
+        @PatchMapping("/client-members/{client_id}/role/update")
+        public ResponseEntity<ApiResponse<Void>> updateRoleMember(
+                        @AuthenticationPrincipal User user,
+                        @PathVariable UUID client_id,
+                        @Valid @RequestBody UpdateMembershipRoleRequestDto requestDto) {
+                clientManagementService.updateClientMemberRole(user, client_id, requestDto);
+                return ResponseEntity.ok(ApiResponse.success(null, "Thay đổi role của thành viên thành công."));
+        }
+
+        @PostMapping("/client-members/{client_id}/role/{member_id}")
+        public ResponseEntity<ApiResponse<Void>> softDeleteMember(
+                        @AuthenticationPrincipal User user,
+                        @PathVariable UUID client_id,
+                        @PathVariable UUID member_id) {
+                clientManagementService.softDeleteClientMember(user, client_id, member_id);
+                return ResponseEntity.ok(ApiResponse.success(null, "Xóa thành vien thành công."));
         }
 
         @GetMapping("/credentials/{client_id}")

@@ -21,6 +21,7 @@ import com.Authentication.AuthService.dto.client.ClientSecretDto;
 import com.Authentication.AuthService.dto.client.ClientSecretResponseDto;
 import com.Authentication.AuthService.dto.client.MemberOfClientDto;
 import com.Authentication.AuthService.dto.client.UpdateClientRequestDto;
+import com.Authentication.AuthService.dto.client.UpdateMembershipRoleRequestDto;
 import com.Authentication.AuthService.dto.client.UserOfClientResponseDto;
 import com.Authentication.AuthService.entity.OAuth2Client;
 import com.Authentication.AuthService.entity.OAuth2ClientMember;
@@ -83,7 +84,7 @@ public class ClientManagementService {
                                                 "Không tìm thấy Client với Client ID.",
                                                 HttpStatus.NOT_FOUND));
 
-                validateClientOwnershipCanManageSetting(client.getId(), user.getId());
+                validatePermission(client.getId(), user.getId(), ClientPermission.MANAGE_SETTINGS);
 
                 // Do đang sử dụng PATCH nên Hibernate sẽ tự động check dirty nếu trường nào có
                 // thay đổi thì mới cập nhật
@@ -93,12 +94,12 @@ public class ClientManagementService {
 
         @Transactional(readOnly = true)
         public List<ClientIdDto> getClientIdsByMemberUser(User user) {
-                return oAuth2ClientMemberRepository.findClientIdDtosByUserId(user.getId());
+                return oAuth2ClientMemberRepository.findClientIdDtosByUserIdIsActive(user.getId());
         }
 
         @Transactional(readOnly = true)
         public List<MemberOfClientDto> getMembersByClientId(UUID clientId, User user) {
-                validateClientOwnershipCanView(clientId, user.getId());
+                validatePermission(clientId, user.getId(), ClientPermission.VIEW);
                 return oAuth2ClientMemberRepository.findActiveMembersByClientId(clientId);
         }
 
@@ -109,7 +110,7 @@ public class ClientManagementService {
                                                 "Không tìm thấy Client với Client ID.",
                                                 HttpStatus.NOT_FOUND));
 
-                OAuth2ClientMember ownerShip = validateClientOwnership(client.getId(), user.getId());
+                OAuth2ClientMember ownerShip = validatePermission(client.getId(), user.getId(), ClientPermission.VIEW);
                 // Step 1: Query secrets với createdBy
                 List<OAuth2ClientSecret> secrets = clientSecretRepository.findByClient_idWithCreatedBy(client.getId());
 
@@ -191,7 +192,7 @@ public class ClientManagementService {
                                 .orElseThrow(() -> new BusinessException("NOT_FOUND_CLIENT",
                                                 "Không tìm thấy Client với Client ID.",
                                                 HttpStatus.NOT_FOUND));
-                validateClientOwnership(client.getId(), user.getId());
+                validatePermission(client.getId(), user.getId(), ClientPermission.MANAGE_SECRETS);
 
                 String rawSecret = tokenCryptoService.generateSecureRandomToken(32);
                 String encodedSecret = passwordEncoder.encode(rawSecret);
@@ -215,7 +216,7 @@ public class ClientManagementService {
 
         @Transactional
         public void deleteClientSecret(User user, UUID client_id, UUID secretId) {
-                validateClientOwnership(client_id, user.getId());
+                validatePermission(client_id, user.getId(), ClientPermission.MANAGE_SECRETS);
 
                 OAuth2ClientSecret clientSecret = clientSecretRepository
                                 .findByIdAndClientId(secretId, client_id)
@@ -229,7 +230,7 @@ public class ClientManagementService {
         // secret này
         @Transactional
         public void revokeClientSecret(User user, UUID client_id, UUID secretId) {
-                validateClientOwnership(client_id, user.getId());
+                validatePermission(client_id, user.getId(), ClientPermission.MANAGE_SECRETS);
 
                 OAuth2ClientSecret clientSecret = clientSecretRepository
                                 .findByIdAndClientId(secretId, client_id)
@@ -248,7 +249,7 @@ public class ClientManagementService {
 
         @Transactional
         public void deleteClient(User user, UUID client_id) {
-                validateClientOwnershipCanDeleteClient(client_id, user.getId());
+                validatePermission(client_id, user.getId(), ClientPermission.DELETE_CLIENT);
                 if (!oAuth2ClientRepository.existsById(client_id)) {
                         throw new BusinessException(
                                         "NOT_FOUND_CLIENT",
@@ -258,63 +259,46 @@ public class ClientManagementService {
                 oAuth2ClientRepository.deleteById(client_id);
         }
 
-        private OAuth2ClientMember validateClientOwnership(UUID client_id, UUID userId) {
-                OAuth2ClientMember ownerShip = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(client_id,
-                                userId);
-                if (ownerShip == null) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền truy cập vào Client này.",
-                                        HttpStatus.FORBIDDEN);
+        @Transactional
+        public void updateClientMemberRole(User user, UUID clientId, UpdateMembershipRoleRequestDto requestDto) {
+                validatePermission(clientId, user.getId(),
+                                ClientPermission.MANAGE_MEMBERS);
+                OAuth2ClientMember member = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(clientId,
+                                requestDto.getMemberId());
+                if (member == null) {
+                        throw new BusinessException("MEMBER_NOT_FOUND", "Không tìm thấy thành viên này.",
+                                        HttpStatus.NOT_FOUND);
                 }
-
-                if (!ownerShip.getRole().canManageSecrets()) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền quản lý secret của Client này.",
-                                        HttpStatus.FORBIDDEN);
-                }
-
-                return ownerShip;
+                member.setRole(requestDto.getRole());
         }
 
-        private void validateClientOwnershipCanManageSetting(UUID client_id, UUID userId) {
-                OAuth2ClientMember ownerShip = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(client_id,
-                                userId);
-                if (ownerShip == null) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền truy cập vào Client này.",
-                                        HttpStatus.FORBIDDEN);
+        @Transactional
+        public void softDeleteClientMember(User user, UUID clientId, UUID memberId) {
+                validatePermission(clientId, user.getId(), ClientPermission.MANAGE_MEMBERS);
+                OAuth2ClientMember member = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(clientId,
+                                memberId);
+                if (member == null) {
+                        throw new BusinessException("MEMBER_NOT_FOUND",
+                                        "Thành viên đã bị xóa hoặc chưa được thêm vào client.");
                 }
-
-                if (!ownerShip.getRole().hasPermission(ClientPermission.MANAGE_SETTINGS)) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền quản lý cài đặt của Client này.",
-                                        HttpStatus.FORBIDDEN);
-                }
+                member.setActive(false);
         }
 
-        private void validateClientOwnershipCanDeleteClient(UUID client_id, UUID userId) {
-                OAuth2ClientMember ownerShip = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(client_id,
-                                userId);
-                if (ownerShip == null) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền truy cập vào Client này.",
-                                        HttpStatus.FORBIDDEN);
-                }
+        private OAuth2ClientMember validatePermission(UUID clientId, UUID userId, ClientPermission permission) {
+                OAuth2ClientMember member = oAuth2ClientMemberRepository
+                                .findByClientIdAndUserIdIsActive(clientId, userId);
 
-                if (!ownerShip.getRole().hasPermission(ClientPermission.DELETE_CLIENT)) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền xóa Client này.",
-                                        HttpStatus.FORBIDDEN);
-                }
-        }
-
-        private void validateClientOwnershipCanView(UUID clientId, UUID userId) {
-                OAuth2ClientMember ownerShip = oAuth2ClientMemberRepository.findByClientIdAndUserIdIsActive(clientId,
-                                userId);
-                if (ownerShip == null) {
-                        throw new BusinessException("FORBIDDEN", "Bạn không có quyền truy cập vào Client này.",
-                                        HttpStatus.FORBIDDEN);
-                }
-
-                if (!ownerShip.getRole().hasPermission(ClientPermission.VIEW)) {
+                if (member == null) {
                         throw new BusinessException("FORBIDDEN",
-                                        "Bạn không có quyền xem danh sách thành viên của Client này.",
-                                        HttpStatus.FORBIDDEN);
+                                        "Bạn không có quyền truy cập vào Client này.", HttpStatus.FORBIDDEN);
                 }
+
+                if (!member.getRole().hasPermission(permission)) {
+                        throw new BusinessException("FORBIDDEN",
+                                        "Bạn không có quyền thực hiện thao tác này.", HttpStatus.FORBIDDEN);
+                }
+
+                return member; // trả về để caller dùng nếu cần (vd: getClientCredential)
         }
 
         private void validateNumberOfClientSecret(UUID client_id) {

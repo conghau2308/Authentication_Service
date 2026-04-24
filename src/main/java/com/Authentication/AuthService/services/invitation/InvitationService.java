@@ -3,6 +3,7 @@ package com.Authentication.AuthService.services.invitation;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -76,7 +77,7 @@ public class InvitationService {
                 }
 
                 boolean alreadyMember = memberRepository
-                                .existsByClientIdAndUserId(clientId, invitee.getId());
+                                .existsByClientIdAndUserIdAndIsActiveTrue(clientId, invitee.getId());
                 if (alreadyMember) {
                         throw new BusinessException("ALREADY_MEMBER",
                                         "Người dùng này đã là thành viên của ứng dụng.", HttpStatus.CONFLICT);
@@ -91,8 +92,7 @@ public class InvitationService {
                 }
 
                 String token = tokenCryptoService.generateSecureRandomToken(32);
-                String confirmUrl = baseUrl + "/invitations/accept?token=" + token;
-                String declineUrl = baseUrl + "/invitations/decline?token=" + token;
+                String previewUrl = baseUrl + "/invitations?token=" + token;
 
                 ClientInvitation invitation = ClientInvitation.builder()
                                 .client(client)
@@ -115,8 +115,7 @@ public class InvitationService {
                                                 "clientName", client.getClientName(),
                                                 "invitedBy", inviter.getName(),
                                                 "role", request.getRole().name(),
-                                                "confirmUrl", confirmUrl,
-                                                "declineUrl", declineUrl,
+                                                "previewUrl", previewUrl,
                                                 "expiresAt", invitation.getExpiresAt().toString(),
                                                 "expiryDays", invitationExpiryDays));
 
@@ -142,19 +141,29 @@ public class InvitationService {
                                         "Bạn không có quyền xác nhận lời mời này.", HttpStatus.FORBIDDEN);
                 }
 
-                boolean alreadyMember = memberRepository
-                                .existsByClientIdAndUserId(invitation.getClient().getId(), currentUser.getId());
-                if (alreadyMember) {
-                        throw new BusinessException("ALREADY_MEMBER",
-                                        "Bạn đã là thành viên của ứng dụng này.", HttpStatus.CONFLICT);
-                }
+                Optional<OAuth2ClientMember> existingMember = memberRepository
+                                .findByClientIdAndUserId(invitation.getClient().getId(), currentUser.getId());
 
-                OAuth2ClientMember membership = OAuth2ClientMember.builder()
-                                .client(invitation.getClient())
-                                .user(currentUser)
-                                .role(invitation.getRole())
-                                .build();
-                memberRepository.save(membership);
+                if (existingMember.isPresent()) {
+                        OAuth2ClientMember member = existingMember.get();
+
+                        if (member.isActive()) {
+                                throw new BusinessException("ALREADY_MEMBER",
+                                                "Bạn đã là thành viên của ứng dụng này.", HttpStatus.CONFLICT);
+                        }
+
+                        // Re-activate revoked member
+                        member.reActive(invitation.getRole(), currentUser);
+                        memberRepository.save(member);
+
+                } else {
+                        OAuth2ClientMember membership = OAuth2ClientMember.builder()
+                                        .client(invitation.getClient())
+                                        .user(currentUser)
+                                        .role(invitation.getRole())
+                                        .build();
+                        memberRepository.save(membership);
+                }
 
                 invitation.accept();
 

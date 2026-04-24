@@ -76,4 +76,11 @@ public class OAuth2ClientMember {
         public void activate() {
                 this.isActive = true;
         }
+
+        public void reActive(ClientRole role, User userAdded) {
+                this.role = role;
+                this.isActive = true;
+                this.addedBy = userAdded;
+                this.addedAt = LocalDateTime.now();
+        }
 }

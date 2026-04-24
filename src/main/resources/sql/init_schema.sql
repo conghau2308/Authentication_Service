@@ -233,6 +233,74 @@ COMMENT ON COLUMN oauth2_user_consents.granted_scopes IS 'Scopes đã được u
 COMMENT ON COLUMN oauth2_user_consents.updated_at IS 'Cập nhật khi user grant thêm scope mới';
 
 -- =====================================================
+-- TABLE: email_outbox
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS email_outbox (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_name VARCHAR(100) NOT NULL,
+    to_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    payload TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    last_tried_at TIMESTAMP,
+    last_error TEXT,
+    sent_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_outbox_status CHECK (status IN ('PENDING', 'SENT', 'FAILED')),
+    CONSTRAINT chk_outbox_retry CHECK (retry_count >= 0)
+);
+
+CREATE INDEX idx_outbox_status ON email_outbox(status);
+
+CREATE INDEX idx_outbox_created_at ON email_outbox(created_at);
+
+CREATE INDEX idx_outbox_retry_count ON email_outbox(retry_count);
+
+-- Index composite để query PENDING + retry_count < max hiệu quả hơn
+CREATE INDEX idx_outbox_pending_retry ON email_outbox(status, retry_count)
+WHERE
+    status = 'PENDING';
+
+COMMENT ON TABLE email_outbox IS 'Outbox pattern — lưu email chờ gửi, đảm bảo at-least-once delivery';
+
+COMMENT ON COLUMN email_outbox.payload IS 'JSON chứa variables để render Thymeleaf template';
+
+COMMENT ON COLUMN email_outbox.retry_count IS 'Số lần đã thử gửi thất bại';
+
+COMMENT ON COLUMN email_outbox.last_error IS 'Message lỗi của lần thử cuối cùng';
+
+-- =====================================================
+-- TABLE: client_invitations
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS client_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL,
+    invited_by UUID NOT NULL,
+    invitee_email VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    expires_at TIMESTAMP NOT NULL,
+    accepted_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_invitation_client FOREIGN KEY (client_id) REFERENCES oauth2_clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_invitation_inviter FOREIGN KEY (invited_by) REFERENCES users(id)
+);
+
+CREATE INDEX idx_invitation_token ON client_invitations(token);
+
+CREATE INDEX idx_invitation_client_id ON client_invitations(client_id);
+
+CREATE INDEX idx_invitation_email ON client_invitations(invitee_email);
+
+CREATE INDEX idx_invitation_status ON client_invitations(status);
+
+CREATE INDEX idx_invitation_expires_at ON client_invitations(expires_at);
+
+-- =====================================================
 -- TRIGGER: Auto update updated_at cho users
 -- =====================================================
 CREATE
