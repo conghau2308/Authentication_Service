@@ -1,25 +1,20 @@
 package com.Authentication.AuthService.services.enrollment;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
 import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
-import com.Authentication.AuthService.dto.auth.RefreshTokenData;
-import com.Authentication.AuthService.dto.user.UserInforResponseDto;
 import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.UserRepository;
 import com.Authentication.AuthService.services.auth.AuthJwtService;
 import com.Authentication.AuthService.services.auth.FaceAuthService;
-import com.Authentication.AuthService.services.auth.RefreshTokenService;
 import com.Authentication.AuthService.services.cookies.CookiesService;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,8 +30,6 @@ public class UserEnrollService {
     private final FaceAuthService faceAuthService;
     private final AuthJwtService authJwtService;
     private final CookiesService cookiesService;
-    private final CookieConfig cookieConfig;
-    private final RefreshTokenService refreshTokenService;
 
     @Transactional
     public void enroll(UserEnrollRequestDto request) {

@@ -1,6 +1,8 @@
 package com.Authentication.AuthService.exception;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.exception.business.BusinessException;
@@ -52,6 +55,19 @@ public class GlobalExceptionHandler {
         public ResponseEntity<ApiResponse<Object>> handlePythonException(PythonApisException exception) {
                 return ResponseEntity.status(exception.getStatus()).body(
                                 ApiResponse.error(exception.getMessage(), exception.getErrorCode()));
+        }
+
+        @ExceptionHandler(ResponseStatusException.class)
+        public ResponseEntity<ApiResponse<Object>> handleResponseStatusException(
+                        ResponseStatusException ex) {
+
+                // Phân biệt rate limit với các ResponseStatusException khác
+                boolean isRateLimit = ex.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS;
+                String code = isRateLimit ? "RATE_LIMIT_EXCEEDED" : ex.getStatusCode().toString();
+                String message = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+
+                return ResponseEntity.status(ex.getStatusCode()).body(
+                                ApiResponse.error(message, code));
         }
 
         // Xử lý lỗi chung chung

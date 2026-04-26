@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.Authentication.AuthService.annotation.RateLimit;
 import com.Authentication.AuthService.dto.client.ClientCredentialsResponseDto;
 import com.Authentication.AuthService.dto.client.ClientEnrollRequestDto;
 import com.Authentication.AuthService.dto.client.ClientEnrollResponseDto;
@@ -29,6 +30,7 @@ import com.Authentication.AuthService.dto.invitation.SendInvitationRequestDto;
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.dto.user.UserSearchResultDto;
 import com.Authentication.AuthService.entity.User;
+import com.Authentication.AuthService.enums.LimitStrategy;
 import com.Authentication.AuthService.services.enrollment.ClientManagementService;
 import com.Authentication.AuthService.services.invitation.InvitationService;
 import com.Authentication.AuthService.services.user.UserManageService;
@@ -44,6 +46,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Client Management", description = "Apis for managing clients")
+@RateLimit(limit = 20, durationSeconds = 60, strategy = LimitStrategy.BY_IP)
 public class ClientEnrollPortalController {
         private final ClientManagementService clientManagementService;
         private final InvitationService invitationService;
@@ -102,6 +105,7 @@ public class ClientEnrollPortalController {
                 return ResponseEntity.ok(ApiResponse.success(null, "Xóa Client Secret thành công."));
         }
 
+        @RateLimit(limit = 100, durationSeconds = 60)
         @GetMapping("/client-members")
         public ResponseEntity<ApiResponse<List<ClientIdDto>>> getClientMembers(
                         @AuthenticationPrincipal User user) {
@@ -109,6 +113,7 @@ public class ClientEnrollPortalController {
                 return ResponseEntity.ok(ApiResponse.success(result, "Lấy danh sách client thành công."));
         }
 
+        @RateLimit(limit = 100, durationSeconds = 60)
         @GetMapping("/client-members/{client_id}")
         public ResponseEntity<ApiResponse<List<MemberOfClientDto>>> getMembersByClientId(
                         @AuthenticationPrincipal User user,

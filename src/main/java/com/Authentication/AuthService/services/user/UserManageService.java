@@ -17,7 +17,6 @@ import com.Authentication.AuthService.dto.user.AuthorizedApplicationDto;
 import com.Authentication.AuthService.dto.user.AuthorizedApplicationResponseDto;
 import com.Authentication.AuthService.dto.user.UpdateUserInforRequestDto;
 import com.Authentication.AuthService.dto.user.UserSearchResultDto;
-import com.Authentication.AuthService.entity.OAuth2UserConsent;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.OAuth2UserConsentRepository;

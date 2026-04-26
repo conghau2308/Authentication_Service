@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.Authentication.AuthService.annotation.RateLimit;
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.CheckUsernameRequestDto;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
@@ -48,6 +49,7 @@ public class FaceAuthController {
                                 ApiResponse.success(null, "Đăng ký tài khoản thành công."));
         }
 
+        @RateLimit(limit = 100, durationSeconds = 60)
         @SecurityRequirements
         @PostMapping("/check-username")
         public ResponseEntity<ApiResponse<UsernameAvailabilityDto>> checkUsernameAvailability(
@@ -92,6 +94,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(null, "Đăng xuất thành công."));
         }
 
+        @RateLimit(limit = 100, durationSeconds = 60)
         @GetMapping("/me")
         public ResponseEntity<ApiResponse<UserInforResponseDto>> getMe(@AuthenticationPrincipal User user) {
                 UserInforResponseDto response = UserInforResponseDto.builder()

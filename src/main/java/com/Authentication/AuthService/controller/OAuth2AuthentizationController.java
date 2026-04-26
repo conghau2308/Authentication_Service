@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.Authentication.AuthService.annotation.RateLimit;
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.OAuth2ValidateClientResponseDto;
 import com.Authentication.AuthService.dto.RefreshTokenResponseDto;
@@ -16,13 +17,11 @@ import com.Authentication.AuthService.dto.oauth.ConsentRequestDto;
 import com.Authentication.AuthService.dto.oauth.UserInforResponseDto;
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.entity.User;
+import com.Authentication.AuthService.enums.LimitStrategy;
 import com.Authentication.AuthService.services.oauth.AuthenticationService;
 import com.Authentication.AuthService.services.oauth.UserInforService;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "OAuth Authentization", description = "APIs for OAuth authentication and authorization")
+@RateLimit(limit = 1000, durationSeconds = 60, strategy = LimitStrategy.BY_CLIENT_ID)
 public class OAuth2AuthentizationController {
 
     private final AuthenticationService authenticationService;
@@ -58,6 +58,7 @@ public class OAuth2AuthentizationController {
         return ResponseEntity.ok(ApiResponse.success(result, "Các tham số là hợp lệ."));
     }
 
+    @RateLimit(limit = 50, durationSeconds = 60, strategy = LimitStrategy.BY_USER)
     @PostMapping("/authorize")
     public ResponseEntity<ApiResponse<AuthorizeResponseDto>> authorize(
             @RequestBody AuthorizeRequestDto request,
@@ -66,6 +67,7 @@ public class OAuth2AuthentizationController {
         return ResponseEntity.ok(ApiResponse.success(result, "Authorize thành công."));
     }
 
+    @RateLimit(limit = 50, durationSeconds = 60, strategy = LimitStrategy.BY_USER)
     @PostMapping("/authorize/consent")
     public ResponseEntity<ApiResponse<AuthorizeResponseDto>> confirmConsent(
             @RequestBody ConsentRequestDto request,
@@ -127,36 +129,12 @@ public class OAuth2AuthentizationController {
      */
     // Chú ý: hiện tại code đang filter header thủ công nên hãy xem cách sử dụng
     // java security nếu cần thiết
+    @RateLimit(limit = 50, durationSeconds = 60, strategy = LimitStrategy.BY_USER)
     @GetMapping("/userinfo")
     public ResponseEntity<ApiResponse<UserInforResponseDto>> getUserInfo(
             @RequestHeader("Authorization") String authorization) {
         UserInforResponseDto result = userInforService.getUserInfo(authorization);
 
         return ResponseEntity.ok(ApiResponse.success(result, "Lấy thông tin user thành công."));
-    }
-
-    /**
-     * OAuth Logout - Clear OAuth cookies only
-     */
-    @PostMapping("/logout")
-    public ResponseEntity<?> logout(
-            HttpServletRequest request,
-            HttpServletResponse response) {
-        String refreshToken = extractRefreshTokenFromCookie(request);
-        authenticationService.logout(refreshToken, response);
-
-        return ResponseEntity.ok(ApiResponse.success(null, "Đăng xuất thành công."));
-    }
-
-    private String extractRefreshTokenFromCookie(HttpServletRequest request) {
-        if (request.getCookies() == null) {
-            return null;
-        }
-
-        return Arrays.stream(request.getCookies())
-                .filter(cookie -> cookieConfig.getRefreshTokenName().equals(cookie.getName()))
-                .map(Cookie::getValue)
-                .findFirst()
-                .orElse(null);
     }
 }
