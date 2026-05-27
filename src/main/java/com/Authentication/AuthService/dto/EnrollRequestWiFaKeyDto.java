@@ -10,6 +10,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EnrollRequestWiFaKeyDto {
-    @JsonProperty("image_b64")
+    @JsonProperty("image")
     private String imageB64;
 }

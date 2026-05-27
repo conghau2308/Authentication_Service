@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     helper_data TEXT NOT NULL,
+    mask TEXT NOT NULL,
     key_hash TEXT NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'USER',
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -304,13 +305,13 @@ CREATE INDEX idx_invitation_expires_at ON client_invitations(expires_at);
 -- TRIGGER: Auto update updated_at cho users
 -- =====================================================
 CREATE
-OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $ $ BEGIN NEW.updated_at = CURRENT_TIMESTAMP;
+OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP;
 
 RETURN NEW;
 
 END;
 
-$ $ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_users_updated_at BEFORE
 UPDATE
@@ -326,6 +327,7 @@ INSERT INTO
         name,
         email,
         helper_data,
+        mask,
         key_hash,
         role,
         is_active
@@ -336,6 +338,7 @@ VALUES
         'System Admin',
         'admin@example.com',
         '{}',
+        '',
         'hash123',
         'ADMIN',
         true
@@ -361,7 +364,7 @@ SET
     public;
 
 -- Lấy ID của admin user để dùng làm created_by
-DO $ $ DECLARE v_admin_id UUID;
+DO $$ DECLARE v_admin_id UUID;
 
 v_client_id UUID;
 
@@ -437,7 +440,7 @@ RAISE NOTICE 'Created client: %, id: %',
 'my-web-app-client',
 v_client_id;
 
-END $ $;
+END $$;
 
 -- Verify
 SELECT

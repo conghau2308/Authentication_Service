@@ -45,15 +45,8 @@ public class UserEnrollService {
             throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
         }
 
-        // UserEnrollResponseDto response =
-        // faceAuthService.enrollUser(request.getUsername(), request.getImage_b64());
-
-        // ── FAKE RESPONSE để test ──────────────────────────────
-        UserEnrollResponseDto response = UserEnrollResponseDto.builder()
-                .helper_data_b64("FAKE_HELPER_DATA_" + request.getUsername())
-                .key_hash_b64("FAKE_KEY_HASH_" + request.getUsername())
-                .build();
-        // ───────────────────────────────────────────────────────
+        UserEnrollResponseDto response =
+                faceAuthService.enrollUser(request.getUsername(), request.getImage_b64());
 
         if (response == null) {
             throw new BusinessException("ENROLL_FAILED", "Đăng ký khuôn mặt không thành công.");
@@ -64,6 +57,7 @@ public class UserEnrollService {
                 .name(request.getName())
                 .email(request.getEmail())
                 .helperData(response.getHelper_data_b64())
+                .mask(response.getMask_b64())
                 .keyHash(response.getKey_hash_b64())
                 .build();
 
@@ -79,10 +73,9 @@ public class UserEnrollService {
             throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
         }
 
-        // boolean result = faceAuthService.verifyUser(request.getUsername(),
-        // request.getImageBase64(),
-        // user.getHelperData(), user.getKeyHash());
-        boolean result = true;
+        boolean result = faceAuthService.verifyUser(request.getUsername(),
+                request.getImageBase64(),
+                user.getHelperData(), user.getMask(), user.getKeyHash());
 
         if (result) {
             // Cập nhật lần verify mới nhất

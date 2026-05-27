@@ -59,6 +59,9 @@ public class User implements UserDetails {
     @Column(name = "key_hash", nullable = false, columnDefinition = "TEXT")
     private String keyHash;
 
+    @Column(name = "mask", nullable = false, columnDefinition = "TEXT")
+    private String mask;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 50)
     @Builder.Default

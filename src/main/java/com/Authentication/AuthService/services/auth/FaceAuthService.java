@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import com.Authentication.AuthService.exception.business.PythonApisException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
@@ -32,42 +34,20 @@ public class FaceAuthService {
     }
 
     /**
-     * Custom exception để truyền thông tin lỗi chi tiết
-     */
-    public static class PythonApiException extends RuntimeException {
-        private final String errorCode;
-        private final int statusCode;
-
-        public PythonApiException(String message, String errorCode, int statusCode) {
-            super(message);
-            this.errorCode = errorCode;
-            this.statusCode = statusCode;
-        }
-
-        public String getErrorCode() {
-            return errorCode;
-        }
-
-        public int getStatusCode() {
-            return statusCode;
-        }
-    }
-
-    /**
      * Parse error response từ Python API
      */
-    private PythonApiException parsePythonError(String errorBody, int statusCode) {
+    private PythonApisException parsePythonError(String errorBody, int statusCode) {
         try {
             JsonNode jsonNode = objectMapper.readTree(errorBody);
             String detail = jsonNode.has("detail") ? jsonNode.get("detail").asText() : errorBody;
             String errorCode = jsonNode.has("error_code") ? jsonNode.get("error_code").asText() : "PYTHON_API_ERROR";
 
             log.debug("Parsed error - detail: {}, errorCode: {}", detail, errorCode);
-            return new PythonApiException(detail, errorCode, statusCode);
+            return new PythonApisException(errorCode, detail, HttpStatus.valueOf(statusCode));
 
         } catch (Exception e) {
             log.warn("Không thể parse error JSON, sử dụng raw error body");
-            return new PythonApiException(errorBody, "PYTHON_API_ERROR", statusCode);
+            return new PythonApisException("PYTHON_API_ERROR", errorBody, HttpStatus.valueOf(statusCode));
         }
     }
 
@@ -93,7 +73,7 @@ public class FaceAuthService {
                                         log.error("❌ Python API enroll thất bại - Status: {}, Body: {}",
                                                 statusCode, errorBody);
 
-                                        PythonApiException exception = parsePythonError(errorBody, statusCode);
+                                        PythonApisException exception = parsePythonError(errorBody, statusCode);
                                         return Mono.error(exception);
                                     }))
                     .bodyToMono(UserEnrollResponseDto.class)
@@ -107,7 +87,7 @@ public class FaceAuthService {
 
             return response;
 
-        } catch (PythonApiException e) {
+        } catch (PythonApisException e) {
             // Ném lại exception với thông tin chi tiết để controller xử lý
             log.error("❌ Python API error: {} (code: {})", e.getMessage(), e.getErrorCode());
             throw e;
@@ -115,17 +95,17 @@ public class FaceAuthService {
         } catch (WebClientResponseException e) {
             log.error("❌ WebClient error - Status: {}, Body: {}",
                     e.getStatusCode(), e.getResponseBodyAsString());
-            throw new PythonApiException(
-                    "Lỗi kết nối đến Python API",
+            throw new PythonApisException(
                     "CONNECTION_ERROR",
-                    e.getStatusCode().value());
+                    "Lỗi kết nối đến Python API",
+                    (HttpStatus) e.getStatusCode());
 
         } catch (Exception e) {
             log.error("❌ Lỗi không xác định: {}", e.getMessage());
-            throw new PythonApiException(
-                    "Lỗi hệ thống: " + e.getMessage(),
+            throw new PythonApisException(
                     "SYSTEM_ERROR",
-                    500);
+                    "Lỗi hệ thống: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -133,12 +113,12 @@ public class FaceAuthService {
      * Verify user với xử lý lỗi chi tiết
      */
     public boolean verifyUser(String username, String imageBase64,
-            String helperData, String keyHash) {
+            String helperData, String mask, String keyHash) {
         log.info("🔍 Đang gọi Python API verify cho user: {}", username);
 
         try {
             // Create verify request DTO
-            var verifyRequest = new VerifyRequestWiFaKeyDto(imageBase64, helperData, keyHash);
+            var verifyRequest = new VerifyRequestWiFaKeyDto(imageBase64, helperData, mask, keyHash);
 
             VerifyResponseDto response = webClient.post()
                     .uri("/verify/{username}", username)
@@ -153,7 +133,7 @@ public class FaceAuthService {
                                         log.error("❌ Python API verify thất bại - Status: {}, Body: {}",
                                                 statusCode, errorBody);
 
-                                        PythonApiException exception = parsePythonError(errorBody, statusCode);
+                                        PythonApisException exception = parsePythonError(errorBody, statusCode);
                                         return Mono.error(exception);
                                     }))
                     .bodyToMono(VerifyResponseDto.class)
@@ -167,29 +147,32 @@ public class FaceAuthService {
 
             return response != null && response.isSuccess();
 
-        } catch (PythonApiException e) {
+        } catch (PythonApisException e) {
             log.error("❌ Python API verify error: {} (code: {})", e.getMessage(), e.getErrorCode());
             throw e;
 
         } catch (Exception e) {
             log.error("❌ Lỗi verify không xác định: {}", e.getMessage());
-            throw new PythonApiException(
-                    "Lỗi hệ thống khi verify: " + e.getMessage(),
+            throw new PythonApisException(
                     "SYSTEM_ERROR",
-                    500);
+                    "Lỗi hệ thống khi verify: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }
 
 // DTO classes
 class VerifyRequestWiFaKeyDto {
+    @com.fasterxml.jackson.annotation.JsonProperty("image")
     private String image_b64;
     private String helper_data_b64;
+    private String mask_b64;
     private String key_hash_b64;
 
-    public VerifyRequestWiFaKeyDto(String image_b64, String helper_data_b64, String key_hash_b64) {
+    public VerifyRequestWiFaKeyDto(String image_b64, String helper_data_b64, String mask_b64, String key_hash_b64) {
         this.image_b64 = image_b64;
         this.helper_data_b64 = helper_data_b64;
+        this.mask_b64 = mask_b64;
         this.key_hash_b64 = key_hash_b64;
     }
 
@@ -200,6 +183,10 @@ class VerifyRequestWiFaKeyDto {
 
     public String getHelper_data_b64() {
         return helper_data_b64;
+    }
+
+    public String getMask_b64() {
+        return mask_b64;
     }
 
     public String getKey_hash_b64() {

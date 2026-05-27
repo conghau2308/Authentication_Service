@@ -7,5 +7,6 @@ import lombok.Data;
 @Builder
 public class UserEnrollResponseDto {
     private String helper_data_b64;
+    private String mask_b64;
     private String key_hash_b64;
 }
