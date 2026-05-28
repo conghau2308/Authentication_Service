@@ -39,7 +39,7 @@ public class OAuth2Client {
     @GeneratedValue(strategy = GenerationType.UUID)
     // Lưu trữ UUID ở dạng 16bytes thay vì readable UUID(36 bytes) xxx-xxx-xxx... để
     // tiết kiệm bộ nhớ nhưng số lượng vẫn như nhau
-    @Column(name = "id", nullable = false, updatable = false, columnDefinition = "BINARY(16)")
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @Column(name = "client_id", nullable = false, length = 255)

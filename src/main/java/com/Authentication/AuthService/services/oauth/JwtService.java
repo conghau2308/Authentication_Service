@@ -112,6 +112,8 @@ public class JwtService {
         OauthIdTokenClaims claims = OauthIdTokenClaims.builder()
                 .type(TOKEN_TYPE_ID)
                 .jti(generateUniqueTokenId(userId, clientId))
+                .user_id(userId)
+                .client_id(clientId)
                 .nonce(nonce)
                 .auth_time(Instant.now().getEpochSecond())
                 .email(user.getEmail())

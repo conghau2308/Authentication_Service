@@ -63,11 +63,27 @@ public class RefreshTokenService {
 
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
 
+        // Thử decode Base64
+        try {
+            byte[] decoded = java.util.Base64.getDecoder().decode(secret);
+            if (decoded.length >= 32) {
+                keyBytes = decoded;
+            }
+        } catch (Exception e) {
+            // Không phải base64 hợp lệ, dùng string gốc
+        }
+
         if (keyBytes.length < 32) {
             log.error("AES secret is too short: {} bytes. Required: minimum 32 bytes", keyBytes.length);
             throw new IllegalStateException(
                     "AES secret must be at least 32 bytes (256 bits). Current: " + keyBytes.length + " bytes");
         }
+
+        // AES-256 yêu cầu key chính xác 32 bytes
+        if (keyBytes.length > 32) {
+            keyBytes = java.util.Arrays.copyOf(keyBytes, 32);
+        }
+
         return new SecretKeySpec(keyBytes, "AES");
     }
 
@@ -173,9 +189,16 @@ public class RefreshTokenService {
                     refreshTokenData.getUserId(),
                     refreshTokenData.getClientId(),
                     refreshTokenData.getScope());
+            
+            String newIdToken = jwtService.generateIdToken(
+                    refreshTokenData.getUserId(),
+                    refreshTokenData.getClientId(),
+                    java.util.UUID.randomUUID().toString(),
+                    "");
 
             return RefreshTokenResponseDto.builder()
                     .accessToken(newAccessToken)
+                    .idToken(newIdToken)
                     .refreshToken(newToken)
                     .expiresIn(cookieConfig.getAccessTokenMaxAge())
                     .build();
@@ -236,7 +259,7 @@ public class RefreshTokenService {
         Object value = redisTemplate.opsForValue().get(key);
 
         if (value != null) {
-            RefreshTokenData tokenData = (RefreshTokenData) value;
+            RefreshTokenData tokenData = objectMapper.convertValue(value, RefreshTokenData.class);
             tokenData.revoke();
 
             long ttl = tokenData.getExpiresAt().getEpochSecond() - Instant.now().getEpochSecond();
@@ -387,6 +410,6 @@ public class RefreshTokenService {
                     "Không tìm thấy Refresh Token.", HttpStatus.UNAUTHORIZED);
         }
 
-        return (RefreshTokenData) value;
+        return objectMapper.convertValue(value, RefreshTokenData.class);
     }
 }

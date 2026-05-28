@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AccessTokenService {
     private final RedisTemplate<String, Object> redisTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     private final PasswordEncoder passwordEncoder;
     private final CookieConfig cookieConfig;
     private final TokenCryptoService tokenCryptoService;
@@ -31,16 +32,18 @@ public class AccessTokenService {
     }
 
     public AccessTokenData getAccessToken(String accessToken) {
-        String key = RedisKeyPrefix.ACCESS_TOKEN_OAUTH.getPrefix() + passwordEncoder.encode(accessToken);
+        String key = RedisKeyPrefix.ACCESS_TOKEN_OAUTH.getPrefix() + tokenCryptoService.hashToken(accessToken);
+        System.out.println("GET ACCESS TOKEN KEY: " + key);
         Object value = redisTemplate.opsForValue().get(key);
         if (value == null) {
             throw new BusinessException("INVALID_TOKEN", "Access Token đã hết hạn.", HttpStatus.UNAUTHORIZED);
         }
-        return (AccessTokenData) value;
+        return objectMapper.convertValue(value, AccessTokenData.class);
     }
 
     private void saveAccessTokenToRedis(String accessToken, String userId, String clientId, String scope) {
-        String key = RedisKeyPrefix.ACCESS_TOKEN_OAUTH.getPrefix() + passwordEncoder.encode(accessToken);
+        String key = RedisKeyPrefix.ACCESS_TOKEN_OAUTH.getPrefix() + tokenCryptoService.hashToken(accessToken);
+        System.out.println("SAVE ACCESS TOKEN KEY: " + key);
         long ttl = cookieConfig.getAccessTokenMaxAge() + 60 * 5;
         AccessTokenData tokenData = AccessTokenData.builder()
                 .userId(userId)

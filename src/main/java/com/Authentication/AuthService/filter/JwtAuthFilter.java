@@ -43,6 +43,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        return path.startsWith("/oauth2/userinfo")
+                || path.startsWith("/oauth2/token")
+                || path.startsWith("/oauth2/refresh")
+                || path.startsWith("/oauth2/revoke")
+                || path.startsWith("/oauth2/validate");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain)

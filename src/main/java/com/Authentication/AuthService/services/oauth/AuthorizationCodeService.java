@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AuthorizationCodeService {
     private final RedisTemplate<String, Object> redisTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     // Dùng để tạo chuỗi code ngẫu nhiên an toàn
     private static final SecureRandom secureRandom = new SecureRandom();
@@ -67,11 +68,13 @@ public class AuthorizationCodeService {
     // Validate auth code từ redis
     public AuthorizationCodeData validateAndDeleteAuthCode(String code) {
         String key = RedisKeyPrefix.AUTH_CODE.getPrefix() + code;
-        Object value = redisTemplate.opsForValue().getAndDelete(key);
+        Object value = redisTemplate.opsForValue().get(key);
 
         if (value == null) {
             throw new BusinessException("CODE_NOT_FOUND", "Không tồn tại Authorization code.", HttpStatus.NOT_FOUND);
         }
-        return (AuthorizationCodeData) value;
+        
+        redisTemplate.delete(key);
+        return objectMapper.convertValue(value, AuthorizationCodeData.class);
     }
 }

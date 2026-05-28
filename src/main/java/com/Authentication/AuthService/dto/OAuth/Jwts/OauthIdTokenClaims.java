@@ -21,13 +21,11 @@ public class OauthIdTokenClaims extends OauthAccessTokenClaims {
     private String code_verifier;
 
     public Map<String, Object> toClaimsMap() {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("type", getType());
-        claims.put("jti", getJti());
-        claims.put("nonce", nonce);
-        claims.put("auth_time", auth_time);
-        claims.put("email", email);
-        claims.put("code_verifier", code_verifier);
+        Map<String, Object> claims = super.toClaimsMap();
+        if (nonce != null) claims.put("nonce", nonce);
+        if (auth_time != null) claims.put("auth_time", auth_time);
+        if (email != null) claims.put("email", email);
+        if (code_verifier != null) claims.put("code_verifier", code_verifier);
 
         return claims;
     }

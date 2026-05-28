@@ -74,10 +74,19 @@ public class GlobalExceptionHandler {
         @ExceptionHandler(Exception.class)
         public ResponseEntity<ApiResponse<Object>> handleSystemExceptions(Exception exception) {
                 log.error("System exception caught", exception);
+
+                try {
+                    java.io.File file = new java.io.File("last_error.txt");
+                    java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(file, true));
+                    pw.println("----- NEW ERROR -----");
+                    exception.printStackTrace(pw);
+                    pw.close();
+                } catch (Exception e) {}
+
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                                 ApiResponse.<Object>builder()
                                                 .success(false)
-                                                .message("Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.")
+                                                .message("Lỗi 500: " + exception.getMessage())
                                                 .build());
         }
 }
