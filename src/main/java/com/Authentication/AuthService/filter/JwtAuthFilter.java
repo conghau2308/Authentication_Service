@@ -85,19 +85,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
 
         } catch (ExpiredJwtException e) {
-            log.debug("Token expired: {}", e.getMessage());
-            writeErrorResponse(response, "TOKEN_EXPIRED", "Access token đã hết hạn.", HttpStatus.UNAUTHORIZED);
-            return;
+            log.debug("Token expired — passing to Security: {}", e.getMessage());
+            // Không return 401 ngay — để Spring Security quyết dựa trên permitAll/authenticated rules.
+            // Public endpoint → đi qua bình thường; protected endpoint → Security trả 401.
 
         } catch (JwtException | IllegalArgumentException e) {
-            log.debug("Invalid token: {}", e.getMessage());
-            writeErrorResponse(response, "INVALID_TOKEN", "Access token không hợp lệ.", HttpStatus.UNAUTHORIZED);
-            return;
+            log.debug("Invalid token — passing to Security: {}", e.getMessage());
 
         } catch (BusinessException e) {
-            log.debug("Business error in auth filter: {}", e.getMessage());
-            writeErrorResponse(response, e.getCode(), e.getMessage(), HttpStatus.UNAUTHORIZED);
-            return;
+            log.debug("Business error in auth filter — passing to Security: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);

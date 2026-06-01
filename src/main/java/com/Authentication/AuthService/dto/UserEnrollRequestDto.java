@@ -24,6 +24,12 @@ public class UserEnrollRequestDto {
     @Email(message = "Email không hợp lệ")
     private String email;
 
-    @NotBlank(message = "Ảnh khuôn mặt không được để trống")
-    private String image_b64; // Base64 encoded image từ frontend
+    @NotBlank(message = "Helper data không được để trống")
+    private String helper_data_b64;
+
+    @NotBlank(message = "Mask không được để trống")
+    private String mask_b64;
+
+    @NotBlank(message = "Key hash không được để trống")
+    private String key_hash_b64;
 }

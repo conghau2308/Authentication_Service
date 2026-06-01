@@ -78,8 +78,10 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.POST, "/auth/verify").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/invitations/preview").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/auth/check-username").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/auth/check-email").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/validate").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/userinfo").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/auth/delta").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll() // ← thêm
                                                                                                                // dòng
                                                                                                                // này

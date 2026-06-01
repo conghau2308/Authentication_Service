@@ -6,8 +6,8 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import com.Authentication.AuthService.dto.DeltaResponseDto;
 import com.Authentication.AuthService.dto.UserEnrollRequestDto;
-import com.Authentication.AuthService.dto.UserEnrollResponseDto;
 import com.Authentication.AuthService.dto.UserVerifyRequestDto;
 import com.Authentication.AuthService.dto.user.UsernameAvailabilityDto;
 import com.Authentication.AuthService.entity.User;
@@ -41,24 +41,14 @@ public class UserEnrollService {
             throw new BusinessException("EMAIL_EXISTS", "Email đã được sử dụng.");
         }
 
-        if (request.getImage_b64() == null || request.getImage_b64().isBlank()) {
-            throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
-        }
-
-        UserEnrollResponseDto response =
-                faceAuthService.enrollUser(request.getUsername(), request.getImage_b64());
-
-        if (response == null) {
-            throw new BusinessException("ENROLL_FAILED", "Đăng ký khuôn mặt không thành công.");
-        }
-
+        // Client đã chạy WiFaKey enrollment cục bộ — chỉ lưu kết quả
         User user = User.builder()
                 .username(request.getUsername())
                 .name(request.getName())
                 .email(request.getEmail())
-                .helperData(response.getHelper_data_b64())
-                .mask(response.getMask_b64())
-                .keyHash(response.getKey_hash_b64())
+                .helperData(request.getHelper_data_b64())
+                .mask(request.getMask_b64())
+                .keyHash(request.getKey_hash_b64())
                 .build();
 
         userRepository.save(user);
@@ -69,13 +59,11 @@ public class UserEnrollService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User chưa đăng ký tài khoản."));
 
-        if (request.getImageBase64() == null || request.getImageBase64().isBlank()) {
-            throw new BusinessException("IMAGE_REQUIRED", "Vui lòng gửi ảnh khuôn mặt.");
+        if (request.getHash_k_b64() == null || request.getHash_k_b64().isBlank()) {
+            throw new BusinessException("HASH_REQUIRED", "Vui lòng gửi hash xác thực sinh trắc học.");
         }
 
-        boolean result = faceAuthService.verifyUser(request.getUsername(),
-                request.getImageBase64(),
-                user.getHelperData(), user.getMask(), user.getKeyHash());
+        boolean result = faceAuthService.verifyHashK(request.getHash_k_b64(), user.getKeyHash());
 
         if (result) {
             // Cập nhật lần verify mới nhất
@@ -147,6 +135,22 @@ public class UserEnrollService {
         boolean isAvailable = !userRepository.existsByUsername(username);
         return UsernameAvailabilityDto.builder()
                 .available(isAvailable)
+                .build();
+    }
+
+    public UsernameAvailabilityDto checkEmailAvailability(String email) {
+        boolean isAvailable = !userRepository.existsByEmail(email);
+        return UsernameAvailabilityDto.builder()
+                .available(isAvailable)
+                .build();
+    }
+
+    public DeltaResponseDto getDelta(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User chưa đăng ký tài khoản."));
+        return DeltaResponseDto.builder()
+                .helper_data_b64(user.getHelperData())
+                .mask_b64(user.getMask())
                 .build();
     }
 }
