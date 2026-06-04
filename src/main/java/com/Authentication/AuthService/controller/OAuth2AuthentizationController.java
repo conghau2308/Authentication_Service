@@ -111,7 +111,7 @@ public class OAuth2AuthentizationController {
      * Endpoint để revoke refresh token
      */
     @PostMapping("/revoke")
-    public ResponseEntity<Void> revokeToken(
+    public ResponseEntity<ApiResponse<Void>> revokeToken(
             @RequestParam("token") String token,
             @RequestParam("token_type_hint") String tokenTypeHint,
             @RequestParam("client_id") String clientId,
@@ -119,7 +119,7 @@ public class OAuth2AuthentizationController {
 
         authenticationService.revoke(token, tokenTypeHint, clientId, clientSecret);
 
-        return ResponseEntity.ok(ApiResponse.success(null, "Revoke token thành công."));
+        return ResponseEntity.ok(ApiResponse.<Void>success(null, "Revoke token thành công."));
     }
 
     /**
