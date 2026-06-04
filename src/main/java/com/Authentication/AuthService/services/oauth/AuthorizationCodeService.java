@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -64,14 +66,18 @@ public class AuthorizationCodeService {
         return base64Encoder.encodeToString(randomBytes);
     }
 
+    private final ObjectMapper objectMapper;
+
     // Validate auth code từ redis
     public AuthorizationCodeData validateAndDeleteAuthCode(String code) {
         String key = RedisKeyPrefix.AUTH_CODE.getPrefix() + code;
-        Object value = redisTemplate.opsForValue().getAndDelete(key);
+        Object value = redisTemplate.opsForValue().get(key);
 
-        if (value == null) {
+        if (value != null) {
+            redisTemplate.delete(key);
+            return objectMapper.convertValue(value, AuthorizationCodeData.class);
+        } else {
             throw new BusinessException("CODE_NOT_FOUND", "Không tồn tại Authorization code.", HttpStatus.NOT_FOUND);
         }
-        return (AuthorizationCodeData) value;
     }
 }

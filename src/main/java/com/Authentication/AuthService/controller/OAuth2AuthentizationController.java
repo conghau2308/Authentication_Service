@@ -80,7 +80,7 @@ public class OAuth2AuthentizationController {
      * Endpoint /token xử lý cả authorization_code và refresh_token grant types
      */
     @PostMapping("/token")
-    public ResponseEntity<ApiResponse<TokenResponseDto>> token(
+    public ResponseEntity<TokenResponseDto> token(
             @RequestParam(value = "grant_type", required = true) String grantType,
             @RequestParam(value = "client_id", required = true) String clientId,
             @RequestParam(value = "client_secret", required = true) String clientSecret,
@@ -91,12 +91,12 @@ public class OAuth2AuthentizationController {
         TokenResponseDto result = authenticationService.exchangeTokens(grantType, clientId, clientSecret, code,
                 codeVerifier, state, redirectUri);
 
-        return ResponseEntity.ok(ApiResponse.success(result, "Đổi tokens thành công."));
+        return ResponseEntity.ok(result);
     }
 
     // Endpoint để Client refresh token của user
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<RefreshTokenResponseDto>> refresh(
+    public ResponseEntity<RefreshTokenResponseDto> refresh(
             @RequestParam(value = "grant_type", required = true) String grantType,
             @RequestParam(value = "client_id", required = true) String clientId,
             @RequestParam(value = "client_secret", required = true) String clientSecret,
@@ -104,14 +104,14 @@ public class OAuth2AuthentizationController {
         RefreshTokenResponseDto result = authenticationService.refreshToken(grantType, clientId, clientSecret,
                 refreshToken);
 
-        return ResponseEntity.ok(ApiResponse.success(result, "Refresh thành công."));
+        return ResponseEntity.ok(result);
     }
 
     /**
      * Endpoint để revoke refresh token
      */
     @PostMapping("/revoke")
-    public ResponseEntity<ApiResponse<Void>> revokeToken(
+    public ResponseEntity<Void> revokeToken(
             @RequestParam("token") String token,
             @RequestParam("token_type_hint") String tokenTypeHint,
             @RequestParam("client_id") String clientId,
@@ -131,10 +131,10 @@ public class OAuth2AuthentizationController {
     // java security nếu cần thiết
     @RateLimit(limit = 50, durationSeconds = 60, strategy = LimitStrategy.BY_USER)
     @GetMapping("/userinfo")
-    public ResponseEntity<ApiResponse<UserInforResponseDto>> getUserInfo(
+    public ResponseEntity<UserInforResponseDto> getUserInfo(
             @RequestHeader("Authorization") String authorization) {
         UserInforResponseDto result = userInforService.getUserInfo(authorization);
 
-        return ResponseEntity.ok(ApiResponse.success(result, "Lấy thông tin user thành công."));
+        return ResponseEntity.ok(result);
     }
 }

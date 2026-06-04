@@ -21,6 +21,8 @@ import com.Authentication.AuthService.dto.oauth.Jwts.OauthRefreshTokenClaims;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.repository.UserRepository;
+import com.Authentication.AuthService.repository.OAuth2ClientMemberRepository;
+import com.Authentication.AuthService.entity.OAuth2ClientMember;
 import com.Authentication.AuthService.services.auth.crypto.RsaKeyManagerService;
 
 import java.nio.charset.StandardCharsets;
@@ -48,6 +50,7 @@ public class JwtService {
     private final CookieConfig cookieConfig;
     private final RsaKeyManagerService rsaKeyManagerService;
     private final UserRepository userRepository;
+    private final OAuth2ClientMemberRepository oAuth2ClientMemberRepository;
 
     private final JwtSecretConfig jwtSecretConfig;
     private SecretKey signingKey;
@@ -109,12 +112,20 @@ public class JwtService {
             throw new BusinessException("INVALID_USER", "User đã bị cấm trên hệ thống.", HttpStatus.UNAUTHORIZED);
         }
 
+        OAuth2ClientMember member = oAuth2ClientMemberRepository.findByClientIdAndUsername(clientId, user.getUsername());
+        String role = member != null && member.isActive() ? member.getRole().name() : user.getRole().name();
+
         OauthIdTokenClaims claims = OauthIdTokenClaims.builder()
                 .type(TOKEN_TYPE_ID)
                 .jti(generateUniqueTokenId(userId, clientId))
                 .nonce(nonce)
                 .auth_time(Instant.now().getEpochSecond())
                 .email(user.getEmail())
+                .name(user.getName())
+                .preferred_username(user.getUsername())
+                .realm_access(java.util.Map.of("roles", java.util.List.of(role)))
+                .user_id(userId)
+                .client_id(clientId)
                 .code_verifier(codeVerifier)
                 .build();
         return createTokenAsym(claims.toClaimsMap(), userId, clientId, cookieConfig.getAccessTokenMaxAge() * 1000);

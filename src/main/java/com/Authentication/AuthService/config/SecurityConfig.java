@@ -81,6 +81,10 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.POST, "/auth/check-email").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/validate").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/userinfo").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/oauth2/token").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/oauth2/refresh").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/oauth2/revoke").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/oauth2/authorize").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/auth/delta").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll() // ← thêm
                                                                                                                // dòng

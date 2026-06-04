@@ -19,15 +19,20 @@ public class OauthIdTokenClaims extends OauthAccessTokenClaims {
     private Long auth_time;
     private String email;
     private String code_verifier;
+    private String name;
+    private String preferred_username;
+    private Map<String, java.util.List<String>> realm_access;
 
+    @Override
     public Map<String, Object> toClaimsMap() {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("type", getType());
-        claims.put("jti", getJti());
-        claims.put("nonce", nonce);
-        claims.put("auth_time", auth_time);
-        claims.put("email", email);
-        claims.put("code_verifier", code_verifier);
+        Map<String, Object> claims = super.toClaimsMap();
+        if (nonce != null) claims.put("nonce", nonce);
+        if (auth_time != null) claims.put("auth_time", auth_time);
+        if (email != null) claims.put("email", email);
+        if (code_verifier != null) claims.put("code_verifier", code_verifier);
+        if (name != null) claims.put("name", name);
+        if (preferred_username != null) claims.put("preferred_username", preferred_username);
+        if (realm_access != null) claims.put("realm_access", realm_access);
 
         return claims;
     }

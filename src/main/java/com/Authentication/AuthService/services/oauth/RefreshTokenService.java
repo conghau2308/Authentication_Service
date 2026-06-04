@@ -48,6 +48,7 @@ public class RefreshTokenService {
     private final TokenCryptoService hashTokenService;
     private final CookieConfig cookieConfig;
     private final RefreshTokenOAuthEncryptionConfig refreshTokenOAuthEncryptionConfig;
+    private final AccessTokenService accessTokenService;
     private SecretKey signingKey;
 
     @PostConstruct
@@ -169,7 +170,7 @@ public class RefreshTokenService {
             // Generate new tokens
             String newToken = generateEncryptedOpaqueToken(familyToken);
             updateFamilyRefreshTokenInRedis(refreshTokenData, familyToken, newToken);
-            String newAccessToken = jwtService.generateAccessToken(
+            String newAccessToken = accessTokenService.generateAndSaveAccessToken(
                     refreshTokenData.getUserId(),
                     refreshTokenData.getClientId(),
                     refreshTokenData.getScope());
@@ -236,7 +237,12 @@ public class RefreshTokenService {
         Object value = redisTemplate.opsForValue().get(key);
 
         if (value != null) {
-            RefreshTokenData tokenData = (RefreshTokenData) value;
+            RefreshTokenData tokenData;
+            if (value instanceof java.util.LinkedHashMap) {
+                tokenData = objectMapper.convertValue(value, RefreshTokenData.class);
+            } else {
+                tokenData = (RefreshTokenData) value;
+            }
             tokenData.revoke();
 
             long ttl = tokenData.getExpiresAt().getEpochSecond() - Instant.now().getEpochSecond();
@@ -385,6 +391,10 @@ public class RefreshTokenService {
         if (value == null) {
             throw new BusinessException("REFRESH_TOKEN_NOT_FOUND",
                     "Không tìm thấy Refresh Token.", HttpStatus.UNAUTHORIZED);
+        }
+
+        if (value instanceof java.util.LinkedHashMap) {
+            return objectMapper.convertValue(value, RefreshTokenData.class);
         }
 
         return (RefreshTokenData) value;
