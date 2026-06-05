@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,7 +34,10 @@ import lombok.RequiredArgsConstructor;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-        private final JwtAuthFilter jwtAuthFilter; // ✅ Inject filter vào
+        private final JwtAuthFilter jwtAuthFilter;
+
+        @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:8080}")
+        private String corsAllowedOrigins;
 
         @Bean
         public PasswordEncoder passwordEncoder() {
@@ -43,8 +47,8 @@ public class SecurityConfig {
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
-                configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:3001",
-                                "https://auth-developer-portal.vercel.app", "http://localhost:8080"));
+                List<String> origins = Arrays.asList(corsAllowedOrigins.split(","));
+                configuration.setAllowedOrigins(origins);
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                 configuration.setAllowedHeaders(List.of(
                                 "Authorization",
@@ -84,6 +88,7 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/userinfo").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/oauth2/token").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/oauth2/refresh").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/oauth2/introspect").permitAll()
                                                 .requestMatchers(HttpMethod.POST, "/oauth2/revoke").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/oauth2/authorize").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/auth/delta").permitAll()

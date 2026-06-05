@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.Authentication.AuthService.config.CookieConfig;
 import com.Authentication.AuthService.dto.oauth.AccessTokenData;
+import com.Authentication.AuthService.dto.oauth.IntrospectionResponseDto;
 import com.Authentication.AuthService.enums.RedisKeyPrefix;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.services.token.TokenCryptoService;
@@ -53,5 +54,32 @@ public class AccessTokenService {
                 .expiresAt(Instant.now().plusSeconds(cookieConfig.getAccessTokenMaxAge()))
                 .build();
         redisTemplate.opsForValue().set(key, tokenData, ttl, TimeUnit.SECONDS);
+    }
+
+    /** RFC 7662 token introspection — trả về active=false thay vì throw exception */
+    public IntrospectionResponseDto introspect(String token) {
+        try {
+            String key = RedisKeyPrefix.ACCESS_TOKEN_OAUTH.getPrefix() + tokenCryptoService.hashToken(token);
+            Object value = redisTemplate.opsForValue().get(key);
+            if (value == null) {
+                return IntrospectionResponseDto.builder().active(false).build();
+            }
+            AccessTokenData data = objectMapper.convertValue(value, AccessTokenData.class);
+            if (data.getExpiresAt().isBefore(Instant.now())) {
+                return IntrospectionResponseDto.builder().active(false).build();
+            }
+            return IntrospectionResponseDto.builder()
+                    .active(true)
+                    .sub(data.getUserId())
+                    .userId(data.getUserId())
+                    .scope(data.getScope())
+                    .clientId(data.getClientId())
+                    .exp(data.getExpiresAt().getEpochSecond())
+                    .iat(data.getIssuedAt().getEpochSecond())
+                    .tokenType("Bearer")
+                    .build();
+        } catch (Exception e) {
+            return IntrospectionResponseDto.builder().active(false).build();
+        }
     }
 }

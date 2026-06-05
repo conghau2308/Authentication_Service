@@ -249,8 +249,8 @@ public class AuthenticationService {
     @Transactional
     public RefreshTokenResponseDto refreshToken(String grantType, String clientId, String clientSecret,
             String refreshToken) {
-        if (!"refresh_code".equals(grantType)) {
-            throw new BusinessException("UNSUPPORTED_GRANT_TYPE", "Chỉ hỗ trợ grant_type=refresh_code.");
+        if (!"refresh_token".equals(grantType)) {
+            throw new BusinessException("UNSUPPORTED_GRANT_TYPE", "Chỉ hỗ trợ grant_type=refresh_token.");
         }
 
         if (clientId == null || clientId.isBlank()) {
@@ -290,6 +290,26 @@ public class AuthenticationService {
         }
 
         return refreshTokenService.rotateEncryptedOpaqueToken(refreshToken, clientId);
+    }
+
+    /** Xác thực client credentials — dùng chung cho /introspect và các endpoint cần auth client. */
+    public void validateClientCredentials(String clientId, String clientSecret) {
+        if (clientId == null || clientId.isBlank()) {
+            throw new BusinessException("INVALID_REQUEST", "Client ID là bắt buộc.");
+        }
+        if (clientSecret == null || clientSecret.isBlank()) {
+            throw new BusinessException("INVALID_REQUEST", "Client Secret là bắt buộc.");
+        }
+        OAuth2Client client = registeredClientRepository.findByClientId(clientId);
+        if (client == null) {
+            throw new BusinessException("INVALID_CLIENT", "Không tìm thấy Client.", HttpStatus.UNAUTHORIZED);
+        }
+        List<OAuth2ClientSecret> secrets = clientSecretRepository.findByClientClientIdAndIsActiveTrue(clientId);
+        boolean matched = secrets.stream()
+                .anyMatch(s -> passwordEncoder.matches(clientSecret, s.getSecretHash()));
+        if (!matched) {
+            throw new BusinessException("INVALID_CLIENT_SECRET", "Client Secret không hợp lệ.", HttpStatus.UNAUTHORIZED);
+        }
     }
 
     @Transactional

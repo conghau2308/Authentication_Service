@@ -1,7 +1,5 @@
 package com.Authentication.AuthService.controller;
 
-import java.util.Arrays;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -14,10 +12,13 @@ import com.Authentication.AuthService.dto.TokenResponseDto;
 import com.Authentication.AuthService.dto.oauth.AuthorizeRequestDto;
 import com.Authentication.AuthService.dto.oauth.AuthorizeResponseDto;
 import com.Authentication.AuthService.dto.oauth.ConsentRequestDto;
+import com.Authentication.AuthService.dto.oauth.IntrospectionResponseDto;
 import com.Authentication.AuthService.dto.oauth.UserInforResponseDto;
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.entity.User;
 import com.Authentication.AuthService.enums.LimitStrategy;
+import com.Authentication.AuthService.exception.business.BusinessException;
+import com.Authentication.AuthService.services.oauth.AccessTokenService;
 import com.Authentication.AuthService.services.oauth.AuthenticationService;
 import com.Authentication.AuthService.services.oauth.UserInforService;
 
@@ -35,6 +36,7 @@ public class OAuth2AuthentizationController {
 
     private final AuthenticationService authenticationService;
     private final UserInforService userInforService;
+    private final AccessTokenService accessTokenService;
     private final CookieConfig cookieConfig;
 
     /**
@@ -77,49 +79,99 @@ public class OAuth2AuthentizationController {
     }
 
     /**
-     * Endpoint /token xử lý cả authorization_code và refresh_token grant types
+     * Endpoint /token — xử lý authorization_code và refresh_token (RFC 6749).
+     * Client authentication qua HTTP Basic Auth (RFC 6749 §2.3.1):
+     *   Authorization: Basic base64(client_id:client_secret)
      */
     @PostMapping("/token")
-    public ResponseEntity<TokenResponseDto> token(
-            @RequestParam(value = "grant_type", required = true) String grantType,
-            @RequestParam(value = "client_id", required = true) String clientId,
-            @RequestParam(value = "client_secret", required = true) String clientSecret,
-            @RequestParam(value = "code", required = true) String code,
-            @RequestParam(value = "code_verifier", required = true) String codeVerifier,
-            @RequestParam(value = "state", required = true) String state,
-            @RequestParam(value = "redirect_uri", required = true) String redirectUri) {
-        TokenResponseDto result = authenticationService.exchangeTokens(grantType, clientId, clientSecret, code,
-                codeVerifier, state, redirectUri);
+    public ResponseEntity<?> token(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam("grant_type") String grantType,
+            @RequestParam(required = false) String code,
+            @RequestParam(value = "code_verifier", required = false) String codeVerifier,
+            @RequestParam(required = false) String state,
+            @RequestParam(value = "redirect_uri", required = false) String redirectUri,
+            @RequestParam(value = "refresh_token", required = false) String refreshToken) {
 
-        return ResponseEntity.ok(result);
+        String[] creds = parseBasicAuth(authHeader);
+        String clientId = creds[0];
+        String clientSecret = creds[1];
+
+        if ("authorization_code".equals(grantType)) {
+            TokenResponseDto result = authenticationService.exchangeTokens(
+                    grantType, clientId, clientSecret, code, codeVerifier, state, redirectUri);
+            return ResponseEntity.ok(result);
+        } else if ("refresh_token".equals(grantType)) {
+            RefreshTokenResponseDto result = authenticationService.refreshToken(
+                    grantType, clientId, clientSecret, refreshToken);
+            return ResponseEntity.ok(result);
+        }
+        throw new BusinessException("UNSUPPORTED_GRANT_TYPE",
+                "Chỉ hỗ trợ grant_type=authorization_code hoặc refresh_token.");
     }
 
-    // Endpoint để Client refresh token của user
+    /**
+     * Endpoint /refresh — giữ lại để backward compat.
+     * Client authentication qua HTTP Basic Auth (RFC 6749 §2.3.1).
+     */
     @PostMapping("/refresh")
     public ResponseEntity<RefreshTokenResponseDto> refresh(
-            @RequestParam(value = "grant_type", required = true) String grantType,
-            @RequestParam(value = "client_id", required = true) String clientId,
-            @RequestParam(value = "client_secret", required = true) String clientSecret,
-            @RequestParam(value = "refresh_code", required = true) String refreshToken) {
-        RefreshTokenResponseDto result = authenticationService.refreshToken(grantType, clientId, clientSecret,
-                refreshToken);
-
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam("grant_type") String grantType,
+            @RequestParam("refresh_token") String refreshToken) {
+        String[] creds = parseBasicAuth(authHeader);
+        RefreshTokenResponseDto result = authenticationService.refreshToken(
+                grantType, creds[0], creds[1], refreshToken);
         return ResponseEntity.ok(result);
     }
 
     /**
-     * Endpoint để revoke refresh token
+     * RFC 7662 Token Introspection — resource server gọi để kiểm tra opaque access token.
+     * Client authentication qua HTTP Basic Auth (RFC 6749 §2.3.1).
+     * Trả về active=false thay vì lỗi khi token không hợp lệ.
+     */
+    @PostMapping("/introspect")
+    public ResponseEntity<IntrospectionResponseDto> introspect(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam("token") String token) {
+        String[] creds = parseBasicAuth(authHeader);
+        authenticationService.validateClientCredentials(creds[0], creds[1]);
+        IntrospectionResponseDto result = accessTokenService.introspect(token);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Endpoint để revoke refresh token.
+     * Client authentication qua HTTP Basic Auth (RFC 6749 §2.3.1).
      */
     @PostMapping("/revoke")
     public ResponseEntity<ApiResponse<Void>> revokeToken(
+            @RequestHeader("Authorization") String authHeader,
             @RequestParam("token") String token,
-            @RequestParam("token_type_hint") String tokenTypeHint,
-            @RequestParam("client_id") String clientId,
-            @RequestParam("client_secret") String clientSecret) {
+            @RequestParam("token_type_hint") String tokenTypeHint) {
 
-        authenticationService.revoke(token, tokenTypeHint, clientId, clientSecret);
+        String[] creds = parseBasicAuth(authHeader);
+        authenticationService.revoke(token, tokenTypeHint, creds[0], creds[1]);
 
         return ResponseEntity.ok(ApiResponse.<Void>success(null, "Revoke token thành công."));
+    }
+
+    /** Parse HTTP Basic Auth header → [clientId, clientSecret] (RFC 6749 §2.3.1). */
+    private String[] parseBasicAuth(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            throw new BusinessException("INVALID_CLIENT",
+                    "Client authentication yêu cầu Authorization: Basic base64(client_id:client_secret).");
+        }
+        try {
+            String decoded = new String(java.util.Base64.getDecoder().decode(authHeader.substring(6)));
+            int colon = decoded.indexOf(':');
+            if (colon < 1) {
+                throw new BusinessException("INVALID_CLIENT", "Basic Auth credentials không hợp lệ.");
+            }
+            return new String[]{ decoded.substring(0, colon), decoded.substring(colon + 1) };
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("INVALID_CLIENT", "Base64 encoding trong Authorization header không hợp lệ.");
+        }
     }
 
     /**
