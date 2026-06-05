@@ -52,6 +52,7 @@ public class SecurityConfig {
                                 "Accept",
                                 "X-Requested-With",
                                 "ngrok-skip-browser-warning"));
+                configuration.setExposedHeaders(List.of("Retry-After"));
                 configuration.setAllowCredentials(true);
 
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

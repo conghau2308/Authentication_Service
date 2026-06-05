@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.Authentication.AuthService.dto.response.ApiResponse;
 import com.Authentication.AuthService.exception.business.BusinessException;
 import com.Authentication.AuthService.exception.business.PythonApisException;
+import com.Authentication.AuthService.exception.business.RateLimitExceededException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -55,6 +56,17 @@ public class GlobalExceptionHandler {
         public ResponseEntity<ApiResponse<Object>> handlePythonException(PythonApisException exception) {
                 return ResponseEntity.status(exception.getStatus()).body(
                                 ApiResponse.error(exception.getMessage(), exception.getErrorCode()));
+        }
+
+        @ExceptionHandler(RateLimitExceededException.class)
+        public ResponseEntity<ApiResponse<Object>> handleRateLimitExceeded(
+                        RateLimitExceededException ex) {
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.set("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+                return ResponseEntity
+                                .status(HttpStatus.TOO_MANY_REQUESTS)
+                                .headers(headers)
+                                .body(ApiResponse.error(ex.getMessage(), "RATE_LIMIT_EXCEEDED"));
         }
 
         @ExceptionHandler(ResponseStatusException.class)

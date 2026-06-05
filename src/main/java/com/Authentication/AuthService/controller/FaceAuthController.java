@@ -43,6 +43,7 @@ public class FaceAuthController {
         private final UserEnrollService userEnrollService;
         private final CookieConfig cookieConfig;
 
+        @RateLimit(limit = 5, durationSeconds = 150)
         @SecurityRequirements
         @PostMapping("/enroll")
         public ResponseEntity<ApiResponse<Void>> registerNewUser(@Valid @RequestBody UserEnrollRequestDto request) {
@@ -72,6 +73,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(response, message));
         }
 
+        @RateLimit(limit = 5, durationSeconds = 150)
         @SecurityRequirements
         @PostMapping("/verify")
         public ResponseEntity<ApiResponse<String>> verifyUser(
@@ -82,6 +84,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(token, "Xác thực thành công."));
         }
 
+        @RateLimit(limit = 20, durationSeconds = 60)
         @SecurityRequirements
         @PostMapping("/refresh")
         public ResponseEntity<ApiResponse<Void>> refreshToken(
@@ -93,6 +96,7 @@ public class FaceAuthController {
                 return ResponseEntity.ok(ApiResponse.success(null, "Refresh token thành công."));
         }
 
+        @RateLimit(limit = 20, durationSeconds = 60)
         @SecurityRequirements
         @PostMapping("/logout")
         public ResponseEntity<ApiResponse<Void>> logout(
@@ -113,7 +117,7 @@ public class FaceAuthController {
          * Không trả key_hash — client không cần và không nên biết.
          */
         @SecurityRequirements
-        @RateLimit(limit = 5, durationSeconds = 60)
+        @RateLimit(limit = 5, durationSeconds = 150)
         @GetMapping("/delta")
         public ResponseEntity<ApiResponse<DeltaResponseDto>> getDelta(
                         @RequestParam String username,
