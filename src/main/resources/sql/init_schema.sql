@@ -222,6 +222,15 @@ CREATE INDEX IF NOT EXISTS idx_consents_user_id ON oauth2_user_consents(user_id)
 CREATE INDEX IF NOT EXISTS idx_consents_client_id ON oauth2_user_consents(client_id);
 
 -- Trigger updated_at (dùng lại function đã có)
+-- Sẽ tạo ở dưới cùng hoặc phải dời function lên trên
+-- Chuyển function lên trên
+CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ 
+BEGIN 
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER update_consents_updated_at BEFORE
 UPDATE
     ON oauth2_user_consents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -304,14 +313,6 @@ CREATE INDEX idx_invitation_expires_at ON client_invitations(expires_at);
 -- =====================================================
 -- TRIGGER: Auto update updated_at cho users
 -- =====================================================
-CREATE
-OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP;
-
-RETURN NEW;
-
-END;
-
-$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_users_updated_at BEFORE
 UPDATE
