@@ -1,5 +1,7 @@
 package com.Authentication.AuthService.services.auth;
 
+import com.Authentication.AuthService.services.auth.wifakey.LdpcDecoderService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -7,36 +9,42 @@ import java.security.MessageDigest;
 import java.util.Base64;
 
 /**
- * WiFaKey verification — client-side architecture.
+ * WiFaKey verification — server-side decode architecture.
  *
- * Server không xử lý ảnh hay embedding. Client tự chạy fuzzy commitment
- * và chỉ gửi hash_k lên. Service này chỉ so sánh hash.
+ * Client chỉ gửi c' = b_selected XOR helper_data (noisy codeword); server tự
+ * chạy LDPC decode (Neural-MS, ONNX), tái tạo khoá, hash và so sánh — client
+ * không bao giờ thấy khoá tái tạo hay hash của nó.
  */
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class FaceAuthService {
 
+    private final LdpcDecoderService ldpcDecoderService;
+
     /**
-     * So sánh hash_k từ client với stored key_hash trong DB.
+     * Giải mã c' từ client, tái tạo khoá, hash và so sánh với stored key_hash.
      * Dùng constant-time comparison để tránh timing attack.
      *
-     * @param hashKB64       Base64 của hash(k) client gửi lên
+     * @param cPrimeB64        Base64 của c' (noisy codeword) client gửi lên
      * @param storedKeyHashB64 Base64 của hash(k) đã lưu khi enrollment
      * @return true nếu khớp
      */
-    public boolean verifyHashK(String hashKB64, String storedKeyHashB64) {
-        if (hashKB64 == null || storedKeyHashB64 == null) {
-            log.warn("verifyHashK: null input");
+    public boolean verifyCPrime(String cPrimeB64, String storedKeyHashB64) {
+        if (cPrimeB64 == null || storedKeyHashB64 == null) {
+            log.warn("verifyCPrime: null input");
             return false;
         }
         try {
-            byte[] received = Base64.getDecoder().decode(hashKB64);
-            byte[] stored   = Base64.getDecoder().decode(storedKeyHashB64);
-            boolean match   = MessageDigest.isEqual(received, stored);
-            log.info("WiFaKey hash verification: {}", match ? "✅ MATCH" : "❌ NO MATCH");
+            byte[] cPrime = Base64.getDecoder().decode(cPrimeB64);
+            byte[] stored = Base64.getDecoder().decode(storedKeyHashB64);
+
+            byte[] reconstructedHash = ldpcDecoderService.reconstructKeyHash(cPrime);
+            boolean match = MessageDigest.isEqual(reconstructedHash, stored);
+            log.info("WiFaKey verification: {}", match ? "✅ MATCH" : "❌ NO MATCH");
             return match;
         } catch (IllegalArgumentException e) {
-            log.error("verifyHashK: invalid Base64 input — {}", e.getMessage());
+            log.error("verifyCPrime: invalid Base64 input — {}", e.getMessage());
             return false;
         }
     }

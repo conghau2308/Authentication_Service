@@ -12,6 +12,6 @@ public class UserVerifyRequestDto {
     @NotBlank(message = "Username là bắt buộc.")
     private String username;
 
-    @NotBlank(message = "Hash key là bắt buộc.")
-    private String hash_k_b64;
+    @NotBlank(message = "Mã khoá nhiễu (c') là bắt buộc.")
+    private String c_prime_b64;
 }

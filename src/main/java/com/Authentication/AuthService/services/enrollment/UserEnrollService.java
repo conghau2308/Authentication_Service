@@ -59,11 +59,11 @@ public class UserEnrollService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User chưa đăng ký tài khoản."));
 
-        if (request.getHash_k_b64() == null || request.getHash_k_b64().isBlank()) {
-            throw new BusinessException("HASH_REQUIRED", "Vui lòng gửi hash xác thực sinh trắc học.");
+        if (request.getC_prime_b64() == null || request.getC_prime_b64().isBlank()) {
+            throw new BusinessException("C_PRIME_REQUIRED", "Vui lòng gửi dữ liệu xác thực sinh trắc học.");
         }
 
-        boolean result = faceAuthService.verifyHashK(request.getHash_k_b64(), user.getKeyHash());
+        boolean result = faceAuthService.verifyCPrime(request.getC_prime_b64(), user.getKeyHash());
 
         if (result) {
             // Cập nhật lần verify mới nhất

@@ -36,3 +36,6 @@ build/
 keys/private_key.pem
 keys/*.pem
 .env
+
+# WiFaKey LDPC decoder model - large binary, distribute out-of-band
+models/
